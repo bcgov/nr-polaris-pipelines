@@ -1,0 +1,289 @@
+@Library('polaris')
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.Vault
+
+def podman
+
+pipeline {
+    agent none    
+    stages {
+        stage('Checkout app repo') {
+            agent {
+                label 'podman'
+            }
+            environment {
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.gitBranch}"
+            }
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "${GIT_BRANCH}"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [
+                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "app"]
+                    ],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [
+                        [
+                            credentialsId: 'ci-user',
+                            url: "${GIT_REPO}"
+                        ]
+                    ]
+                ])
+            }
+        }
+        stage('Checkout dev-all-in-one') {
+            agent {
+                label 'podman'
+            }
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "refs/tags/v1.0.1"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [
+                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "dev-all-in-one"]
+                    ],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [
+                        [
+                            credentialsId: 'ci-user',
+                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/dev-all-in-one.git"
+                        ]
+                    ]
+                ])
+            }
+        }
+        stage('Deploy to development') {
+            agent {
+                label 'podman'
+            }
+            environment {
+                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
+                PODMAN_CD_VERSION = "${params.cdVersion}"
+                PROJECT = "${params.project}"
+                COMPONENT = "${params.component}"
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.gitBranch}"
+                APP_ROLE_ID = "${params.appRoleJenkinsId}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
+                BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
+                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
+                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
+                NR_BROKER_JWT = credentials('nr-broker-jwt')
+                AUTHFILE = "auth.json"
+            }
+            steps {
+                script {
+                    echo 'Do development deployment'
+                    commonModule = load "pipelines/shared/common.groovy"
+                    intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                    intention.userId = commonModule.getCauseUserId()
+                    intention.eventUrl = env.BUILD_URL
+                    intention.eventProvider = env.EVENT_PROVIDER
+                    intention.open(NR_BROKER_JWT)                    
+                    intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
+                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
+                    env.PODMAN_CD_PASS = cdCreds['password']
+                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
+                    env.REGISTRY_USERNAME = registryCreds['username']
+                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                    env.PODMAN_BUILD_URL = env.BUILD_URL
+                    intention.startAction("configure")
+                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                    def vaultApp = new Vault(vaultAppToken)
+                    def deploymentCreds = vaultApp.read("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development")
+                    // Create an environment variable for each key/value pair
+                    deploymentCreds.each { k, v ->
+                        def key = 'PODMAN_' + k
+                        env."${key}" = v
+                    }
+                    intention.endAction("configure")
+                    intention.startAction("install")
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                        authfile: "${env.AUTHFILE}",
+                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                            -v \$(pwd)/app:/ansible/app \
+                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                            -e PODMAN_*",
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/int \
+                            app/playbooks/playbook.yaml')
+                    podman.logout(authfile: "${env.AUTHFILE}")
+                    intention.endAction("install")
+                    intention.endAction("login")
+                    intention.close(true)
+                    vault.revokeToken()
+                    vaultApp.revokeToken()
+                }
+            }
+        }
+        stage('Deploy to test') {
+            agent {
+                label 'podman'
+            }
+            environment {
+                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
+                PODMAN_CD_VERSION = "${params.cdVersion}"
+                TARGET_ENV = "${params.targetEnv}"
+                PROJECT = "${params.project}"
+                COMPONENT = "${params.component}"
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.gitBranch}"
+                APP_ROLE_ID = "${params.appRoleJenkinsId}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
+                BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
+                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
+                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
+                NR_BROKER_JWT = credentials('nr-broker-jwt')
+                AUTHFILE = "auth.json"
+            }
+            steps {
+                script {
+                    echo 'Do test deployment'
+                    commonModule = load "pipelines/shared/common.groovy"
+                    intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                    intention.userId = commonModule.getCauseUserId()
+                    intention.eventUrl = env.BUILD_URL
+                    intention.eventProvider = env.EVENT_PROVIDER
+                    intention.intention.actions[1].service.environment = 'test'
+                    intention.intention.actions[2].service.environment = 'test'
+                    intention.open(NR_BROKER_JWT)
+                    intention.startAction("login")
+                    intention.startAction("configure")
+                    intention.endAction("configure")
+                    intention.startAction("install")                    
+                    intention.endAction("install")
+                    intention.endAction("login")
+                    intention.close(true)
+                    intention = null
+                }
+            }
+        }
+        stage('Pre-deployment checks for production') {
+            agent {
+                label 'podman'
+            }
+            steps {
+                script {
+                    // TODO: Exit pipeline for SNAPSHOT builds, which should NOT proceed beyond the test environment
+                    echo 'Do pre-deployment checks for production'
+                }
+            }
+        }
+        stage('Approve production deployment') {
+            input {
+                message "Is this build approved for production?"
+                ok "Yes, this build is approved."
+            }
+            steps {
+	            echo "Deployment approved for production"
+            }
+        }
+        stage('Deploy to production') {
+            agent {
+                label 'podman'
+            }
+            environment {
+                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
+                PODMAN_CD_VERSION = "${params.cdVersion}"
+                PROJECT = "${params.project}"
+                COMPONENT = "${params.component}"
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.gitBranch}"
+                APP_ROLE_ID = "${params.appRoleJenkinsId}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
+                BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
+                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
+                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
+                NR_BROKER_JWT = credentials('nr-broker-jwt')
+                AUTHFILE = "auth.json"
+            }
+            steps {
+                script {
+                    echo 'Do production deployment'
+                    commonModule = load "pipelines/deploy/common.groovy"
+                    intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                    intention.userId = commonModule.getCauseUserId()
+                    intention.eventUrl = env.BUILD_URL
+                    intention.eventProvider = env.EVENT_PROVIDER
+                    intention.intention.actions[1].service.environment = 'production'
+                    intention.intention.actions[2].service.environment = 'production'
+                    intention.open(NR_BROKER_JWT)
+                    intention.startAction("login")
+                    intention.startAction("configure")
+                    intention.endAction("configure")
+                    intention.startAction("install")                    
+                    intention.endAction("install")
+                    intention.endAction("login")
+                }
+            }
+        }
+    }
+    post {
+        success {
+            node('podman') {
+                script {
+                    def auditUrl = intention.close(true)
+                    println auditUrl
+                }                
+            }
+        }
+        unstable {
+            node('podman') {
+                script {
+                    if (intention) {
+                        intention.close(false)
+                    }
+                }
+            }
+        }
+        failure {
+            node('podman') {
+                script {
+                    if (intention) {
+                        intention.close(false)
+                    }
+                }
+            }
+        }
+        aborted {
+            node('podman') {
+                script {
+                    if (intention) {
+                        def auditUrl = intention.close(true)
+                        println auditUrl
+                    }
+                }
+            }
+        }
+        always {
+            node('podman') {
+                cleanWs(
+                    cleanWhenAborted: true,
+                    cleanWhenFailure: false,
+                    cleanWhenSuccess: true,
+                    cleanWhenUnstable: false,
+                    deleteDirs: true
+                )
+            }            
+        }
+    }
+}
