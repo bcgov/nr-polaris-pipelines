@@ -83,7 +83,7 @@ pipeline {
                     echo 'Do development deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userId = commonModule.getCauseUserId()
+                    intention.userName = commonModule.getCauseUserId()
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.open(NR_BROKER_JWT)                    
@@ -157,7 +157,7 @@ pipeline {
                     echo 'Do test deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userId = commonModule.getCauseUserId()
+                    intention.userName = commonModule.getCauseUserId()
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'test'
