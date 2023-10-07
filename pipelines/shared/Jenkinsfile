@@ -8,7 +8,7 @@ def podman
 pipeline {
     agent none    
     stages {
-        stage('Checkout app repo') {
+        stage('Checkout repo') {
             agent {
                 label 'podman'
             }
@@ -17,21 +17,16 @@ pipeline {
                 GIT_BRANCH = "${params.gitBranch}"
             }
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "${GIT_BRANCH}"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "app"]
-                    ],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [
-                        [
-                            credentialsId: 'ci-user',
-                            url: "${GIT_REPO}"
-                        ]
-                    ]
-                ])
+                script {
+                    sh 'rm -rf app'
+                    if (params.privateRepo == true) {
+                        env.GITHUB_USER = "${params.githubUser}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"
+                        sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                    } else {
+                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                    }
+                }
             }
         }
         stage('Checkout dev-all-in-one') {
@@ -77,13 +72,14 @@ pipeline {
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
+                CAUSE_USER_ID = "${params.USER_ID}"
             }
             steps {
                 script {
                     echo 'Do development deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = commonModule.getCauseUserId()
+                    intention.userName = env.CAUSE_USER_ID
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.open(NR_BROKER_JWT)                    
@@ -124,9 +120,19 @@ pipeline {
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
+                    intention = null
                     vault.revokeToken()
                     vaultApp.revokeToken()
                 }
+            }
+        }
+        stage('Approve test deployment') {
+            input {
+                message "Is this build approved for test?"
+                ok "Yes, this build is approved."
+            }
+            steps {
+	            echo "Deployment approved for test"
             }
         }
         stage('Deploy to test') {
@@ -151,13 +157,14 @@ pipeline {
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
+                CAUSE_USER_ID = "${params.USER_ID}"
             }
             steps {
                 script {
                     echo 'Do test deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = commonModule.getCauseUserId()
+                    intention.userName = env.CAUSE_USER_ID
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'test'
@@ -215,13 +222,14 @@ pipeline {
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
+                CAUSE_USER_ID = "${params.USER_ID}"
             }
             steps {
                 script {
                     echo 'Do production deployment'
-                    commonModule = load "pipelines/deploy/common.groovy"
+                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userId = commonModule.getCauseUserId()
+                    intention.userName = env.CAUSE_USER_ID
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'production'
@@ -233,6 +241,7 @@ pipeline {
                     intention.startAction("install")                    
                     intention.endAction("install")
                     intention.endAction("login")
+                    intention.close(true)
                 }
             }
         }
