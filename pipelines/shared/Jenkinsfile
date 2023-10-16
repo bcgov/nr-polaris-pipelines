@@ -84,6 +84,7 @@ pipeline {
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'development'
                     intention.intention.actions[2].service.environment = 'development'
+                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
                     intention.open(NR_BROKER_JWT)                    
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
