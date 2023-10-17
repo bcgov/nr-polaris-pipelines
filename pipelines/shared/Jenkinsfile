@@ -130,12 +130,16 @@ pipeline {
             }
         }
         stage('Approve test deployment') {
-            input {
-                message "Is this build approved for test?"
-                ok "Yes, this build is approved."
-            }
             steps {
-	            echo "Deployment approved for test"
+	            script {
+                    echo "Deployment to test pending approval"
+                    def approver = input(message: 'Is this build approved for test?', 
+                        ok: 'Yes, this build is approved.', 
+                        submitterParameter: 'approver'
+                        )
+                    env.TEST_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
+                    echo "Deployment approved for test by ${env.TEST_DEPLOYMENT_APPROVER}"
+                }
             }
         }
         stage('Deploy to test') {
@@ -167,7 +171,7 @@ pipeline {
                     echo 'Do test deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = env.CAUSE_USER_ID
+                    intention.userName = "${env.TEST_DEPLOYMENT_APPROVER}"
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'test'
@@ -196,12 +200,16 @@ pipeline {
             }
         }
         stage('Approve production deployment') {
-            input {
-                message "Is this build approved for production?"
-                ok "Yes, this build is approved."
-            }
             steps {
-	            echo "Deployment approved for production"
+	            script {
+                    echo "Deployment to production pending approval"
+                    def approver = input(message: 'Is this build approved for production?', 
+                        ok: 'Yes, this build is approved.', 
+                        submitterParameter: 'approver'
+                        )
+                    env.PRODUCTION_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
+                    echo "Deployment approved for production by ${env.PRODUCTION_DEPLOYMENT_APPROVER}"
+                }
             }
         }
         stage('Deploy to production') {
@@ -232,7 +240,7 @@ pipeline {
                     echo 'Do production deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = env.CAUSE_USER_ID
+                    intention.userName = "${env.PRODUCTION_DEPLOYMENT_APPROVER}"
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'production'
