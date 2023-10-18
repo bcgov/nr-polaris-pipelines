@@ -22,7 +22,9 @@ pipeline {
                     if (params.privateRepo == true) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) { 
+                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                        }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
                     }
