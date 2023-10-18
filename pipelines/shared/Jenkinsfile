@@ -110,7 +110,7 @@ pipeline {
                     intention.startAction("install")
                     podman = new Podman(this)
                     podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                    podman.run("willhallonline/ansible:2.12-alpine-3.16",
                         authfile: "${env.AUTHFILE}",
                         options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
                             -v \$(pwd)/app:/ansible/app \
