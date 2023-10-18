@@ -118,9 +118,7 @@ pipeline {
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/int \
-                            app/playbooks/playbook.yaml \
-                            --extra-vars "@all.yaml" \ 
-                            --extra-vars "@dev.yaml"')
+                            app/playbooks/playbook.yaml --extra-vars "@all.yaml" --extra-vars "@dev.yaml"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
                     intention.endAction("login")
