@@ -70,6 +70,7 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.ansibleInventoryPath}"
                 PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
@@ -119,7 +120,7 @@ pipeline {
                             -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
-                        command: 'ansible-playbook -i dev-all-in-one/inventory/int \
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
