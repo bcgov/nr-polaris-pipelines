@@ -70,7 +70,7 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
-                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.ansibleInventoryPath}"
+                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.devInventoryPath}"
                 PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
@@ -163,6 +163,7 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.testInventoryPath}"
                 PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
@@ -232,6 +233,7 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
+                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.prodInventoryPath}"
                 PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
