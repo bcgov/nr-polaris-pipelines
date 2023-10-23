@@ -6,7 +6,7 @@ import ca.bc.gov.nrids.polaris.Vault
 def podman
 
 pipeline {
-    agent none    
+    agent none
     stages {
         stage('Checkout repo') {
             agent {
@@ -313,7 +313,7 @@ pipeline {
                 script {
                     def auditUrl = intention.close(true)
                     println auditUrl
-                }                
+                }
             }
         }
         unstable {
