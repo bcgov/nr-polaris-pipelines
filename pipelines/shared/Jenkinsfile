@@ -10,7 +10,7 @@ pipeline {
     stages {
         stage('Checkout repo') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 GIT_REPO = "${params.gitRepo}"
@@ -33,7 +33,7 @@ pipeline {
         }
         stage('Checkout dev-all-in-one') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             steps {
                 checkout([
@@ -55,7 +55,7 @@ pipeline {
         }
         stage('Deploy to development') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -147,7 +147,7 @@ pipeline {
         }
         stage('Deploy to test') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -195,7 +195,7 @@ pipeline {
         }
         stage('Pre-deployment checks for production') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             steps {
                 script {
@@ -219,7 +219,7 @@ pipeline {
         }
         stage('Deploy to production') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -265,7 +265,7 @@ pipeline {
     }
     post {
         success {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     def auditUrl = intention.close(true)
                     println auditUrl
@@ -273,7 +273,7 @@ pipeline {
             }
         }
         unstable {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         intention.close(false)
@@ -282,7 +282,7 @@ pipeline {
             }
         }
         failure {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         intention.close(false)
@@ -291,7 +291,7 @@ pipeline {
             }
         }
         aborted {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         def auditUrl = intention.close(true)
@@ -301,7 +301,7 @@ pipeline {
             }
         }
         always {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 cleanWs(
                     cleanWhenAborted: true,
                     cleanWhenFailure: false,
