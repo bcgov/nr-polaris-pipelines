@@ -152,7 +152,6 @@ pipeline {
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
                 PODMAN_CD_VERSION = "${params.cdVersion}"
-                TARGET_ENV = "${params.targetEnv}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -179,16 +178,49 @@ pipeline {
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'test'
-                    intention.intention.actions[2].service.environment = 'test'
+                    intention.intention.actions[2].service.environment = 'test'                    
+                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
+                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
+                    env.PODMAN_CD_PASS = cdCreds['password']
+                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
+                    env.REGISTRY_USERNAME = registryCreds['username']
+                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                    env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
+                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                    def vaultApp = new Vault(vaultAppToken)
+                    def deploymentCreds = vaultApp.read("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test")
+                    // Create an environment variable for each key/value pair
+                    deploymentCreds.each { k, v ->
+                        def key = 'PODMAN_' + k
+                        env."${key}" = v
+                    }
                     intention.endAction("configure")
-                    intention.startAction("install")                    
+                    intention.startAction("install")
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                        authfile: "${env.AUTHFILE}",
+                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                            -v \$(pwd)/app:/ansible/app \
+                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                            -e PODMAN_*",
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                            app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
+                    podman.logout(authfile: "${env.AUTHFILE}")                    
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
+                    vault.revokeToken()
+                    vaultApp.revokeToken()
                 }
             }
         }
@@ -249,14 +281,49 @@ pipeline {
                     intention.eventUrl = env.BUILD_URL
                     intention.eventProvider = env.EVENT_PROVIDER
                     intention.intention.actions[1].service.environment = 'production'
-                    intention.intention.actions[2].service.environment = 'production'
+                    intention.intention.actions[2].service.environment = 'production'                    
+                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
                     intention.open(NR_BROKER_JWT)
-                    intention.startAction("login")
+                    intention.startAction("login")                    
+                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
+                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
+                    env.PODMAN_CD_PASS = cdCreds['password']
+                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
+                    env.REGISTRY_USERNAME = registryCreds['username']
+                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                    env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
+                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                    def vaultApp = new Vault(vaultAppToken)
+                    def deploymentCreds = vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production")
+                    // Create an environment variable for each key/value pair
+                    deploymentCreds.each { k, v ->
+                        def key = 'PODMAN_' + k
+                        env."${key}" = v
+                    }
                     intention.endAction("configure")
-                    intention.startAction("install")                    
+                    intention.startAction("install")
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                        authfile: "${env.AUTHFILE}",
+                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                            -v \$(pwd)/app:/ansible/app \
+                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                            -e PODMAN_*",
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                            app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
+                    podman.logout(authfile: "${env.AUTHFILE}")                    
                     intention.endAction("install")
                     intention.endAction("login")
+                    intention.close(true)
+                    intention = null
+                    vault.revokeToken()
+                    vaultApp.revokeToken()
                 }
             }
         }
