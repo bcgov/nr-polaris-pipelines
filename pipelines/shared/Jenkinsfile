@@ -82,33 +82,29 @@ pipeline {
                     echo 'Do development deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = env.CAUSE_USER_ID
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'development'
-                    intention.intention.actions[2].service.environment = 'development'
-                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
+                    intention.setEventDetails(
+                        userName: env.CAUSE_USER_ID,
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        environment: 'development',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
+                    )
                     intention.open(NR_BROKER_JWT)                    
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
-                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
-                    env.PODMAN_CD_PASS = cdCreds['password']
-                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
-                    env.REGISTRY_USERNAME = registryCreds['username']
-                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
+                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = registryCreds.USERNAME
+                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
-                    def deploymentCreds = vaultApp.read("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development")
-                    // Create an environment variable for each key/value pair
-                    deploymentCreds.each { k, v ->
-                        def key = 'PODMAN_' + k
-                        env."${key}" = v
-                    }
+                    vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
                     intention.endAction("configure")
                     intention.startAction("install")
                     podman = new Podman(this)
@@ -122,13 +118,13 @@ pipeline {
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
-                    podman.logout(authfile: "${env.AUTHFILE}")
+                    podman.logout(authfile: "${env.AUTHFILE}")                    
+                    vault.revokeToken()
+                    vaultApp.revokeToken()
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
-                    vault.revokeToken()
-                    vaultApp.revokeToken()
                 }
             }
         }
@@ -174,33 +170,28 @@ pipeline {
                     echo 'Do test deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = "${env.TEST_DEPLOYMENT_APPROVER}"
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'test'
-                    intention.intention.actions[2].service.environment = 'test'                    
-                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
+                    intention.setEventDetails(
+                        userName: "${env.TEST_DEPLOYMENT_APPROVER}",
+                        url: env.BUILD_URL,
+                        environment: 'test',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
+                    )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
-                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
-                    env.PODMAN_CD_PASS = cdCreds['password']
-                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
-                    env.REGISTRY_USERNAME = registryCreds['username']
-                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
+                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = registryCreds.USERNAME
+                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
-                    def deploymentCreds = vaultApp.read("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test")
-                    // Create an environment variable for each key/value pair
-                    deploymentCreds.each { k, v ->
-                        def key = 'PODMAN_' + k
-                        env."${key}" = v
-                    }
+                    vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, { key -> 'PODMAN_'+ key })
                     intention.endAction("configure")
                     intention.startAction("install")
                     podman = new Podman(this)
@@ -215,12 +206,12 @@ pipeline {
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
                     podman.logout(authfile: "${env.AUTHFILE}")                    
+                    vault.revokeToken()
+                    vaultApp.revokeToken()                   
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
-                    vault.revokeToken()
-                    vaultApp.revokeToken()
                 }
             }
         }
@@ -277,33 +268,27 @@ pipeline {
                     echo 'Do production deployment'
                     commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = "${env.PRODUCTION_DEPLOYMENT_APPROVER}"
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'production'
-                    intention.intention.actions[2].service.environment = 'production'                    
-                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
-                    intention.open(NR_BROKER_JWT)
+                    intention.setEventDetails(
+                        userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
+                        url: env.BUILD_URL,
+                        environment: 'production',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
+                    )                    intention.open(NR_BROKER_JWT)
                     intention.startAction("login")                    
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
-                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
-                    env.PODMAN_CD_PASS = cdCreds['password']
-                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
-                    env.REGISTRY_USERNAME = registryCreds['username']
-                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
+                    def registryCreds = vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = registryCreds.USERNAME
+                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
-                    def deploymentCreds = vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production")
-                    // Create an environment variable for each key/value pair
-                    deploymentCreds.each { k, v ->
-                        def key = 'PODMAN_' + k
-                        env."${key}" = v
-                    }
+                    vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})                    
                     intention.endAction("configure")
                     intention.startAction("install")
                     podman = new Podman(this)
@@ -318,12 +303,12 @@ pipeline {
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
                     podman.logout(authfile: "${env.AUTHFILE}")                    
+                    vault.revokeToken()
+                    vaultApp.revokeToken()                   
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
-                    vault.revokeToken()
-                    vaultApp.revokeToken()
                 }
             }
         }
