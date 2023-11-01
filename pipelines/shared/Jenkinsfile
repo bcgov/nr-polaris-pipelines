@@ -6,11 +6,11 @@ import ca.bc.gov.nrids.polaris.Vault
 def podman
 
 pipeline {
-    agent none    
+    agent none
     stages {
         stage('Checkout repo') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 GIT_REPO = "${params.gitRepo}"
@@ -22,7 +22,7 @@ pipeline {
                     if (params.privateRepo == true) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
-                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) { 
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
                         }
                     } else {
@@ -33,7 +33,7 @@ pipeline {
         }
         stage('Checkout dev-all-in-one') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             steps {
                 checkout([
@@ -55,7 +55,7 @@ pipeline {
         }
         stage('Deploy to development') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -80,15 +80,15 @@ pipeline {
             steps {
                 script {
                     echo 'Do development deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = env.CAUSE_USER_ID
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'development'
-                    intention.intention.actions[2].service.environment = 'development'
-                    intention.intention.actions[2].package.version = env.PODMAN_CD_VERSION
-                    intention.open(NR_BROKER_JWT)                    
+                    intention.setEventDetails(
+                        userName: env.CAUSE_USER_ID,
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        environment: 'development',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                    )
+                    intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
@@ -136,8 +136,8 @@ pipeline {
             steps {
 	            script {
                     echo "Deployment to test pending approval"
-                    def approver = input(message: 'Is this build approved for test?', 
-                        ok: 'Yes, this build is approved.', 
+                    def approver = input(message: 'Is this build approved for test?',
+                        ok: 'Yes, this build is approved.',
                         submitterParameter: 'approver'
                         )
                     env.TEST_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
@@ -147,7 +147,7 @@ pipeline {
         }
         stage('Deploy to test') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -173,18 +173,19 @@ pipeline {
             steps {
                 script {
                     echo 'Do test deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = "${env.TEST_DEPLOYMENT_APPROVER}"
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'test'
-                    intention.intention.actions[2].service.environment = 'test'
+                    intention.setEventDetails(
+                        userName: "${env.TEST_DEPLOYMENT_APPROVER}",
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        environment: 'test',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                    )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
                     intention.startAction("configure")
                     intention.endAction("configure")
-                    intention.startAction("install")                    
+                    intention.startAction("install")
                     intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
@@ -194,7 +195,7 @@ pipeline {
         }
         stage('Pre-deployment checks for production') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             steps {
                 script {
@@ -207,8 +208,8 @@ pipeline {
             steps {
 	            script {
                     echo "Deployment to production pending approval"
-                    def approver = input(message: 'Is this build approved for production?', 
-                        ok: 'Yes, this build is approved.', 
+                    def approver = input(message: 'Is this build approved for production?',
+                        ok: 'Yes, this build is approved.',
                         submitterParameter: 'approver'
                         )
                     env.PRODUCTION_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
@@ -218,7 +219,7 @@ pipeline {
         }
         stage('Deploy to production') {
             agent {
-                label 'podman'
+                label Podman.AGENT_LABEL_APP
             }
             environment {
                 ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
@@ -243,18 +244,19 @@ pipeline {
             steps {
                 script {
                     echo 'Do production deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.userName = "${env.PRODUCTION_DEPLOYMENT_APPROVER}"
-                    intention.eventUrl = env.BUILD_URL
-                    intention.eventProvider = env.EVENT_PROVIDER
-                    intention.intention.actions[1].service.environment = 'production'
-                    intention.intention.actions[2].service.environment = 'production'
+                    intention.setEventDetails(
+                        userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        environment: 'production',
+                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                    )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
                     intention.startAction("configure")
                     intention.endAction("configure")
-                    intention.startAction("install")                    
+                    intention.startAction("install")
                     intention.endAction("install")
                     intention.endAction("login")
                 }
@@ -263,15 +265,15 @@ pipeline {
     }
     post {
         success {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     def auditUrl = intention.close(true)
                     println auditUrl
-                }                
+                }
             }
         }
         unstable {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         intention.close(false)
@@ -280,7 +282,7 @@ pipeline {
             }
         }
         failure {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         intention.close(false)
@@ -289,7 +291,7 @@ pipeline {
             }
         }
         aborted {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 script {
                     if (intention) {
                         def auditUrl = intention.close(true)
@@ -299,7 +301,7 @@ pipeline {
             }
         }
         always {
-            node('podman') {
+            node(Podman.AGENT_LABEL_APP) {
                 cleanWs(
                     cleanWhenAborted: true,
                     cleanWhenFailure: false,
@@ -307,7 +309,7 @@ pipeline {
                     cleanWhenUnstable: false,
                     deleteDirs: true
                 )
-            }            
+            }
         }
     }
 }
