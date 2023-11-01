@@ -116,9 +116,9 @@ pipeline {
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
-                    podman.logout(authfile: "${env.AUTHFILE}")                    
+                    podman.logout(authfile: "${env.AUTHFILE}")
+                    intention.endAction("install")                                       
                     vault.revokeToken()
-                    intention.endAction("install")
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
@@ -201,9 +201,9 @@ pipeline {
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
-                    podman.logout(authfile: "${env.AUTHFILE}")                    
-                    vault.revokeToken()                   
+                    podman.logout(authfile: "${env.AUTHFILE}") 
                     intention.endAction("install")
+                    vault.revokeToken()
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
@@ -270,7 +270,7 @@ pipeline {
                         packageInstallationVersion: env.PODMAN_CD_VERSION
                     )                    
                     intention.open(NR_BROKER_JWT)
-                    intention.startAction("login")                    
+                    intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
                     def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
@@ -283,7 +283,7 @@ pipeline {
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
                     vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})                    
-                    vaultApp.revokeToken() 
+                    vaultApp.revokeToken()
                     intention.endAction("configure")
                     intention.startAction("install")
                     podman = new Podman(this)
@@ -298,8 +298,8 @@ pipeline {
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
                     podman.logout(authfile: "${env.AUTHFILE}")                    
-                    vault.revokeToken()                  
                     intention.endAction("install")
+                    vault.revokeToken()                    
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
