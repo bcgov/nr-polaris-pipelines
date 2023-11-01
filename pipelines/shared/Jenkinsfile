@@ -86,7 +86,7 @@ pipeline {
                         url: env.BUILD_URL,
                         provider: env.EVENT_PROVIDER,
                         environment: 'development',
-                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
                     )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
@@ -95,20 +95,14 @@ pipeline {
                     def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
                     env.PODMAN_CD_USER = cdCreds['username_lowercase']
                     env.PODMAN_CD_PASS = cdCreds['password']
-                    def registryCreds = vault.read("${env.ARTIFACTORY_VAULT_PATH}")
-                    env.REGISTRY_USERNAME = registryCreds['username']
-                    env.REGISTRY_PASSWORD = registryCreds['password']
+                    vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
-                    def deploymentCreds = vaultApp.read("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development")
-                    // Create an environment variable for each key/value pair
-                    deploymentCreds.each { k, v ->
-                        def key = 'PODMAN_' + k
-                        env."${key}" = v
-                    }
+                    vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
+                    vaultApp.revokeToken()
                     intention.endAction("configure")
                     intention.startAction("install")
                     podman = new Podman(this)
@@ -124,11 +118,10 @@ pipeline {
                             app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
+                    vault.revokeToken()
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
-                    vault.revokeToken()
-                    vaultApp.revokeToken()
                 }
             }
         }
@@ -179,14 +172,39 @@ pipeline {
                         url: env.BUILD_URL,
                         provider: env.EVENT_PROVIDER,
                         environment: 'test',
-                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
                     )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
+                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
+                    env.PODMAN_CD_PASS = cdCreds['password']
+                    vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
+                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                    env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
+                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                    def vaultApp = new Vault(vaultAppToken)
+                    vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, { key -> 'PODMAN_'+ key })
+                    vaultApp.revokeToken()
                     intention.endAction("configure")
                     intention.startAction("install")
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                        authfile: "${env.AUTHFILE}",
+                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                            -v \$(pwd)/app:/ansible/app \
+                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                            -e PODMAN_*",
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                            app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
+                    podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
+                    vault.revokeToken()
                     intention.endAction("login")
                     intention.close(true)
                     intention = null
@@ -250,15 +268,42 @@ pipeline {
                         url: env.BUILD_URL,
                         provider: env.EVENT_PROVIDER,
                         environment: 'production',
-                        packageInstallationVersion: env.PODMAN_CD_VERSION,
+                        packageInstallationVersion: env.PODMAN_CD_VERSION
                     )
                     intention.open(NR_BROKER_JWT)
                     intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
+                    env.PODMAN_CD_USER = cdCreds['username_lowercase']
+                    env.PODMAN_CD_PASS = cdCreds['password']
+                    def registryCreds = vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
+                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                    env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
+                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                    def vaultApp = new Vault(vaultAppToken)
+                    vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})                    
+                    vaultApp.revokeToken() 
                     intention.endAction("configure")
                     intention.startAction("install")
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                        authfile: "${env.AUTHFILE}",
+                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                            -v \$(pwd)/app:/ansible/app \
+                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                            -e PODMAN_*",
+                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                            app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
+                    podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
+                    vault.revokeToken()
                     intention.endAction("login")
+                    intention.close(true)
+                    intention = null
                 }
             }
         }
