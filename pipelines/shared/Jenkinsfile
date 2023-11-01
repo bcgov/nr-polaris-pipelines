@@ -22,7 +22,7 @@ pipeline {
                     if (params.privateRepo == true) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
-                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) { 
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
                         }
                     } else {
@@ -80,7 +80,6 @@ pipeline {
             steps {
                 script {
                     echo 'Do development deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
@@ -166,7 +165,6 @@ pipeline {
             steps {
                 script {
                     echo 'Do test deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
                     intention.setEventDetails(
                         userName: "${env.TEST_DEPLOYMENT_APPROVER}",
@@ -263,7 +261,6 @@ pipeline {
             steps {
                 script {
                     echo 'Do production deployment'
-                    commonModule = load "pipelines/shared/common.groovy"
                     intention = new BrokerIntention(readJSON(file: "app/intention.json"))
                     intention.setEventDetails(
                         userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
@@ -356,7 +353,7 @@ pipeline {
                     cleanWhenUnstable: false,
                     deleteDirs: true
                 )
-            }            
+            }
         }
     }
 }
