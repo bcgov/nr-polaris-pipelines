@@ -89,16 +89,18 @@ pipeline {
                         environment: 'development',
                         packageInstallationVersion: env.PODMAN_CD_VERSION
                     )
-                    intention.open(NR_BROKER_JWT)                    
+                    if (!intention.open(NR_BROKER_JWT)) {
+                        error('Intention could not be opened')
+                    }                    
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
-                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
-                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.REGISTRY_USERNAME = registryCreds.USERNAME
-                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', env, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = env.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = env.PASSWORD
+                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", env, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = env.USERNAME
+                    env.REGISTRY_PASSWORD = env.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -180,12 +182,12 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
-                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
-                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.REGISTRY_USERNAME = registryCreds.USERNAME
-                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', env, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = env.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = env.PASSWORD
+                    vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", env, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = env.USERNAME
+                    env.REGISTRY_PASSWORD = env.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -277,12 +279,12 @@ pipeline {
                     intention.startAction("login")                    
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', cdCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.PODMAN_CD_USER = cdCreds.USERNAME_LOWERCASE
-                    env.PODMAN_CD_PASS = cdCreds.PASSWORD
-                    def registryCreds = vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", registryCreds, keyTransform: { key -> key.toUpperCase() })
-                    env.REGISTRY_USERNAME = registryCreds.USERNAME
-                    env.REGISTRY_PASSWORD = registryCreds.PASSWORD
+                    vault.readToObject('groups/data/appdelivery/jenkins-isss-cdua', env, keyTransform: { key -> key.toUpperCase() })
+                    env.PODMAN_CD_USER = env.USERNAME_LOWERCASE
+                    env.PODMAN_CD_PASS = env.PASSWORD
+                    def registryCreds = vault.readToObject("${env.ARTIFACTORY_VAULT_PATH}", env, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = env.USERNAME
+                    env.REGISTRY_PASSWORD = env.PASSWORD
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
