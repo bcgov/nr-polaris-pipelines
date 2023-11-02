@@ -30,7 +30,7 @@ pipeline {
                     }
                 }
             }
-        }
+        }        
         stage('Checkout dev-all-in-one') {
             agent {
                 label Podman.AGENT_LABEL_APP
@@ -48,6 +48,28 @@ pipeline {
                         [
                             credentialsId: 'ci-user',
                             url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/dev-all-in-one.git"
+                        ]
+                    ]
+                ])
+            }
+        }
+        stage('Checkout INFRA dev-all-in-one') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "release/1.0.0"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [
+                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "infra"]
+                    ],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [
+                        [
+                            credentialsId: 'ci-user',
+                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
                         ]
                     ]
                 ])
@@ -112,9 +134,10 @@ pipeline {
                         options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
                             -v \$(pwd)/app:/ansible/app \
                             -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
-                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                        command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
