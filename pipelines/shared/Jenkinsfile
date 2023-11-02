@@ -31,50 +31,55 @@ pipeline {
                 }
             }
         }
-        stage('Checkout dev-all-in-one') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "refs/tags/v1.0.1"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "dev-all-in-one"]
-                    ],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [
-                        [
-                            credentialsId: 'ci-user',
-                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/dev-all-in-one.git"
-                        ]
-                    ]
-                ])
+        stage('Checkout Source'){
+            parallel{
+                stage('Checkout dev-all-in-one') {
+                    agent {
+                        label Podman.AGENT_LABEL_APP
+                    }
+                    steps {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "refs/tags/v1.0.1"]],
+                            doGenerateSubmoduleConfigurations: false,
+                            extensions: [
+                                [$class: 'RelativeTargetDirectory', relativeTargetDir: "dev-all-in-one"]
+                            ],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [
+                                [
+                                    credentialsId: 'ci-user',
+                                    url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/dev-all-in-one.git"
+                                ]
+                            ]
+                        ])
+                    }
+                }
+                stage('Checkout INFRA dev-all-in-one') {
+                    agent {
+                        label Podman.AGENT_LABEL_APP
+                    }
+                    steps {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "release/1.0.0"]],
+                            doGenerateSubmoduleConfigurations: false,
+                            extensions: [
+                                [$class: 'RelativeTargetDirectory', relativeTargetDir: "infra-dev-all-in-one"]
+                            ],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [
+                                [
+                                    credentialsId: 'ci-user',
+                                    url: "https://apps.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
+                                ]
+                            ]
+                        ])
+                    }
+                }
             }
         }
-        stage('Checkout INFRA dev-all-in-one') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "refs/heads/release/1.0.0"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "infra-dev-all-in-one"]
-                    ],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [
-                        [
-                            credentialsId: 'ci-user',
-                            url: "https://apps.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
-                        ]
-                    ]
-                ])
-            }
-        }
+        
         stage('Deploy to development') {
             agent {
                 label Podman.AGENT_LABEL_APP
