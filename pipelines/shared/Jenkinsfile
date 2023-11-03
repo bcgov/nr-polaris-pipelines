@@ -8,7 +8,7 @@ def podman
 pipeline {
     agent none
     stages {
-        stage('Checkout repo') {
+        stage('Checkout app repo') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
@@ -29,28 +29,6 @@ pipeline {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
                     }
                 }
-            }
-        }        
-        stage('Checkout dev-all-in-one') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "refs/tags/v1.0.1"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "dev-all-in-one"]
-                    ],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [
-                        [
-                            credentialsId: 'ci-user',
-                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/dev-all-in-one.git"
-                        ]
-                    ]
-                ])
             }
         }
         stage('Checkout INFRA dev-all-in-one') {
@@ -93,7 +71,10 @@ pipeline {
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.devInventoryPath}"
-                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
+                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
+                GIT_CREDS = credentials('ci-user')
+                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
@@ -129,11 +110,18 @@ pipeline {
                     intention.startAction("install")
                     podman = new Podman(this)
                     podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GIT_CREDS_USR, password: GIT_CREDS_USR], [var: env.GIT_CREDS_PSW, password: GIT_CREDS_PSW]]]) {
+                        podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: 'ansible-galaxy collection install \
+                                git+https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@${PODMAN_ANSIBLE_COLLECTION_URL} \
+                                -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
+                    }
                     podman.run("willhallonline/ansible:2.13-alpine-3.16",
                         authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                        options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                             -v \$(pwd)/app:/ansible/app \
-                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
                             -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
@@ -180,7 +168,10 @@ pipeline {
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.testInventoryPath}"
-                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
+                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
+                GIT_CREDS = credentials('ci-user')
+                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
@@ -216,11 +207,19 @@ pipeline {
                     intention.startAction("install")
                     podman = new Podman(this)
                     podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GIT_CREDS_USR, password: GIT_CREDS_USR], [var: env.GIT_CREDS_PSW, password: GIT_CREDS_PSW]]]) {
+                        podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: 'ansible-galaxy collection install \
+                                git+https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@${PODMAN_ANSIBLE_COLLECTION_URL} \
+                                -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
+                    }
                     podman.run("willhallonline/ansible:2.13-alpine-3.16",
                         authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                        options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                             -v \$(pwd)/app:/ansible/app \
-                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
@@ -276,7 +275,10 @@ pipeline {
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.prodInventoryPath}"
-                PIPELINE_ARTIFACTORY_CREDS = credentials('ci-user')
+                PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
+                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
+                GIT_CREDS = credentials('ci-user')
+                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-vault-jenkins-role-id')
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
@@ -312,11 +314,19 @@ pipeline {
                     intention.startAction("install")
                     podman = new Podman(this)
                     podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GIT_CREDS_USR, password: GIT_CREDS_USR], [var: env.GIT_CREDS_PSW, password: GIT_CREDS_PSW]]]) {
+                        podman.run("willhallonline/ansible:2.13-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: 'ansible-galaxy collection install \
+                                git+https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@${PODMAN_ANSIBLE_COLLECTION_URL} \
+                                -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
+                    }
                     podman.run("willhallonline/ansible:2.13-alpine-3.16",
                         authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd)/dev-all-in-one:/ansible/dev-all-in-one \
+                        options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                             -v \$(pwd)/app:/ansible/app \
-                            -v \$(pwd)/dev-all-in-one/roles:/etc/ansible/roles \
+                            -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
                         command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
