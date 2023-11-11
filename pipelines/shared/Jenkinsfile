@@ -64,7 +64,7 @@ pipeline {
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
-                APP_ROLE_ID = credentials("knox-${env.PROJECT}-${env.COMPONENT}-dev-role-id")
+                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-dev-role-id")
                 EVENT_PROVIDER = "${params.eventProvider}"
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
@@ -161,7 +161,7 @@ pipeline {
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
-                APP_ROLE_ID = credentials("knox-${env.PROJECT}-${env.COMPONENT}-test-role-id")
+                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-test-role-id")
                 EVENT_PROVIDER = "${params.eventProvider}"
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
@@ -201,7 +201,7 @@ pipeline {
                     intention.startAction("configure")
                     def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                     def vaultApp = new Vault(vaultAppToken)
-                    vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, { key -> 'PODMAN_'+ key })
+                    vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, keyTransform: { key -> 'PODMAN_' + key })
                     vaultApp.revokeToken()
                     intention.endAction("configure")
                     intention.startAction("install")
@@ -222,7 +222,7 @@ pipeline {
                             -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
-                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                        command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
@@ -268,7 +268,7 @@ pipeline {
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
-                APP_ROLE_ID = credentials("knox-${env.PROJECT}-${env.COMPONENT}-prod-role-id")
+                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")
                 EVENT_PROVIDER = "${params.eventProvider}"
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
@@ -329,7 +329,7 @@ pipeline {
                             -v \$(pwd)/infra/inventory:/ansible/inventory \
                             -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                             -e PODMAN_*",
-                        command: 'ansible-playbook -i dev-all-in-one/inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                        command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                             app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
                     podman.logout(authfile: "${env.AUTHFILE}")
                     intention.endAction("install")
