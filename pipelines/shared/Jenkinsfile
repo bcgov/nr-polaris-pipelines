@@ -69,7 +69,6 @@ pipeline {
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.devInventoryPath}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
@@ -95,10 +94,11 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                     def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
                     env.PODMAN_CD_USER = cdCreds['username_lowercase']
-                    env.PODMAN_CD_PASS = cdCreds['password']
-                    vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
+                    env.PODMAN_CD_PASS = cdCreds['password']                    
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -166,7 +166,6 @@ pipeline {
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.testInventoryPath}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
@@ -192,10 +191,11 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                     def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
                     env.PODMAN_CD_USER = cdCreds['username_lowercase']
                     env.PODMAN_CD_PASS = cdCreds['password']
-                    vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -273,7 +273,6 @@ pipeline {
                 VAULT_ADDR = "https://vault-iit.apps.silver.devops.gov.bc.ca"
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                ARTIFACTORY_VAULT_PATH = "apps/data/prod/jenkins/jenkins-polaris/artifactory"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.prodInventoryPath}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "bwa.nrs.gov.bc.ca/int/stash/scm/oneteam/nr_polaris.git#polaris/deploy"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
@@ -299,10 +298,11 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                     def cdCreds = vault.read('groups/data/appdelivery/jenkins-isss-cdua')
                     env.PODMAN_CD_USER = cdCreds['username_lowercase']
                     env.PODMAN_CD_PASS = cdCreds['password']
-                    def registryCreds = vault.readToObject(env.ARTIFACTORY_VAULT_PATH, env, keyTransform: { key -> 'REGISTRY_' + key.toUpperCase() })
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
