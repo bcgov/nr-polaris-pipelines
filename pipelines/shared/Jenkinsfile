@@ -94,9 +94,9 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env, keyTransform: { key -> key })
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -189,9 +189,9 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env, keyTransform: { key -> key })
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
@@ -294,9 +294,9 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env, keyTransform: { key -> key })
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env, keyTransform: { key -> key })
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                     env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                     env.PODMAN_BUILD_URL = env.BUILD_URL
                     intention.startAction("configure")
