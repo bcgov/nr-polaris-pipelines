@@ -129,8 +129,18 @@ pipeline {
                         intention.endAction("login")
                         intention.close(true)
                         intention = null
-                    } catch (err) {
-                        echo "Exception: ${err}"
+                    } catch (IllegalStateException ex) {
+                        def responseBody = ex.getMessage()
+                        echo "IllegalStateException occurred: $ex"
+                        echo "Response body: $responseBody"
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    } catch (IllegalArgumentException ex) {
+                        echo "IllegalArgumentException occurred: $ex"
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    } catch (Exception ex) {
+                        echo "Other exception occurred: $ex"
                         currentBuild.result = 'ABORTED'
                         error('Quitting')
                     }
@@ -226,9 +236,18 @@ pipeline {
                         intention.endAction("login")
                         intention.close(true)
                         intention = null
-                    } catch (err) {
-                        echo "Exception: ${err}"
-                        echo res
+                    } catch (IllegalStateException ex) {
+                        def responseBody = ex.getMessage()
+                        echo "IllegalStateException occurred: $ex"
+                        echo "Response body: $responseBody"
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    } catch (IllegalArgumentException ex) {
+                        echo "IllegalArgumentException occurred: $ex"
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    } catch (Exception ex) {
+                        echo "Other exception occurred: $ex"
                         currentBuild.result = 'ABORTED'
                         error('Quitting')
                     }
