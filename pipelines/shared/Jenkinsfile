@@ -82,52 +82,58 @@ pipeline {
             }
             steps {
                 script {
-                    echo 'Do development deployment'
-                    intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.setEventDetails(
-                        userName: env.CAUSE_USER_ID,
-                        url: env.BUILD_URL,
-                        provider: env.EVENT_PROVIDER,
-                        environment: 'development',
-                        packageInstallationVersion: env.PODMAN_CD_VERSION
-                    )
-                    intention.open(NR_BROKER_JWT)
-                    intention.startAction("login")
-                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
-                    def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
-                    env.PODMAN_BUILD_URL = env.BUILD_URL
-                    intention.startAction("configure")
-                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
-                    def vaultApp = new Vault(vaultAppToken)
-                    vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
-                    vaultApp.revokeToken()
-                    intention.endAction("configure")
-                    intention.startAction("install")
-                    podman = new Podman(this)
-                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    podman.run("willhallonline/ansible:2.12-alpine-3.16",
-                        authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd):/ansible -e PODMAN_*",
-                        command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                    podman.run("willhallonline/ansible:2.12-alpine-3.16",
-                        authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                            -v \$(pwd)/app:/ansible/app \
-                            -v \$(pwd)/infra/inventory:/ansible/inventory \
-                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                            -e PODMAN_*",
-                        command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                            app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
-                    podman.logout(authfile: "${env.AUTHFILE}")
-                    intention.endAction("install")
-                    vault.revokeToken()
-                    intention.endAction("login")
-                    intention.close(true)
-                    intention = null
+                    try {
+                        echo 'Do development deployment'
+                        intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                        intention.setEventDetails(
+                            userName: env.CAUSE_USER_ID,
+                            url: env.BUILD_URL,
+                            provider: env.EVENT_PROVIDER,
+                            environment: 'development',
+                            packageInstallationVersion: env.PODMAN_CD_VERSION
+                        )
+                        intention.open(NR_BROKER_JWT)
+                        intention.startAction("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                        def vault = new Vault(vaultToken)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
+                        env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                        env.PODMAN_BUILD_URL = env.BUILD_URL
+                        intention.startAction("configure")
+                        def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                        def vaultApp = new Vault(vaultAppToken)
+                        vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
+                        vaultApp.revokeToken()
+                        intention.endAction("configure")
+                        intention.startAction("install")
+                        podman = new Podman(this)
+                        podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
+                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                -v \$(pwd)/app:/ansible/app \
+                                -v \$(pwd)/infra/inventory:/ansible/inventory \
+                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -e PODMAN_*",
+                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
+                        podman.logout(authfile: "${env.AUTHFILE}")
+                        intention.endAction("install")
+                        vault.revokeToken()
+                        intention.endAction("login")
+                        intention.close(true)
+                        intention = null
+                    } catch (err) {
+                        echo "Exception: ${err}"
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    }
                 }
             }
         }
@@ -173,52 +179,59 @@ pipeline {
             }
             steps {
                 script {
-                    echo 'Do test deployment'
-                    intention = new BrokerIntention(readJSON(file: "app/intention.json"))
-                    intention.setEventDetails(
-                        userName: "${env.TEST_DEPLOYMENT_APPROVER}",
-                        url: env.BUILD_URL,
-                        provider: env.EVENT_PROVIDER,
-                        environment: 'test',
-                        packageInstallationVersion: env.PODMAN_CD_VERSION
-                    )
-                    intention.open(NR_BROKER_JWT)
-                    intention.startAction("login")
-                    def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
-                    def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                    env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
-                    env.PODMAN_BUILD_URL = env.BUILD_URL
-                    intention.startAction("configure")
-                    def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
-                    def vaultApp = new Vault(vaultAppToken)
-                    vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, keyTransform: { key -> 'PODMAN_' + key })
-                    vaultApp.revokeToken()
-                    intention.endAction("configure")
-                    intention.startAction("install")
-                    podman = new Podman(this)
-                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    podman.run("willhallonline/ansible:2.12-alpine-3.16",
-                        authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd):/ansible -e PODMAN_*",
-                        command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                    podman.run("willhallonline/ansible:2.12-alpine-3.16",
-                        authfile: "${env.AUTHFILE}",
-                        options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                            -v \$(pwd)/app:/ansible/app \
-                            -v \$(pwd)/infra/inventory:/ansible/inventory \
-                            -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                            -e PODMAN_*",
-                        command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                            app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
-                    podman.logout(authfile: "${env.AUTHFILE}")
-                    intention.endAction("install")
-                    vault.revokeToken()
-                    intention.endAction("login")
-                    intention.close(true)
-                    intention = null
+                    try {
+                        echo 'Do test deployment'
+                        intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                        intention.setEventDetails(
+                            userName: "${env.TEST_DEPLOYMENT_APPROVER}",
+                            url: env.BUILD_URL,
+                            provider: env.EVENT_PROVIDER,
+                            environment: 'test',
+                            packageInstallationVersion: env.PODMAN_CD_VERSION
+                        )
+                        def res = intention.open(NR_BROKER_JWT)
+                        intention.startAction("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                        def vault = new Vault(vaultToken)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
+                        env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
+                        env.PODMAN_BUILD_URL = env.BUILD_URL
+                        intention.startAction("configure")
+                        def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                        def vaultApp = new Vault(vaultAppToken)
+                        vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, keyTransform: { key -> 'PODMAN_' + key })
+                        vaultApp.revokeToken()
+                        intention.endAction("configure")
+                        intention.startAction("install")
+                        podman = new Podman(this)
+                        podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
+                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                -v \$(pwd)/app:/ansible/app \
+                                -v \$(pwd)/infra/inventory:/ansible/inventory \
+                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -e PODMAN_*",
+                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
+                        podman.logout(authfile: "${env.AUTHFILE}")
+                        intention.endAction("install")
+                        vault.revokeToken()
+                        intention.endAction("login")
+                        intention.close(true)
+                        intention = null
+                    } catch (err) {
+                        echo "Exception: ${err}"
+                        echo res
+                        currentBuild.result = 'ABORTED'
+                        error('Quitting')
+                    }
                 }
             }
         }
