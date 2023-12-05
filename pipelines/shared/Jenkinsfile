@@ -201,7 +201,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_CD_VERSION,
                             packageInstallationBuildGuid: env.BUILD_GUID
                         )
-                        def res = intention.open(NR_BROKER_JWT)
+                        intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -353,8 +353,8 @@ pipeline {
                         intention.endAction("install")
                         vault.revokeToken()
                         intention.endAction("login")
-                        intention.close(true)
-                        intention = null
+                        def auditUrl = intention.close(true)
+                        println auditUrl
                     } catch (IllegalStateException ex) {
                         echo "IllegalStateException occurred: $ex"
                         currentBuild.result = 'ABORTED'
@@ -373,14 +373,6 @@ pipeline {
         }
     }
     post {
-        success {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    def auditUrl = intention.close(true)
-                    println auditUrl
-                }
-            }
-        }
         unstable {
             node(Podman.AGENT_LABEL_APP) {
                 script {
