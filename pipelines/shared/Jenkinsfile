@@ -324,7 +324,7 @@ pipeline {
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.read("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})                    
+                        vaultApp.readToObject("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})                    
                         vaultApp.revokeToken() 
                         intention.endAction("configure")
                         intention.startAction("install")
