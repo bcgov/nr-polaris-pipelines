@@ -197,7 +197,7 @@ pipeline {
                             environment: 'test',
                             packageInstallationVersion: env.PODMAN_CD_VERSION
                         )
-                        def res = intention.open(NR_BROKER_JWT)
+                        intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
