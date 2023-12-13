@@ -79,7 +79,7 @@ pipeline {
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
-                BUILD_GUID = "${params.traceId}"
+                INTENTION_ID = "${params.intentionId}"
             }
             steps {
                 script {
@@ -92,7 +92,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'development',
                             packageInstallationVersion: env.PODMAN_CD_VERSION,
-                            packageInstallationBuildGuid: env.BUILD_GUID
+                            packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
@@ -186,7 +186,7 @@ pipeline {
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.USER_ID}"
-                BUILD_GUID = "${params.traceId}"
+                INTENTION_ID = "${params.intentionId}"
             }
             steps {
                 script {
@@ -199,7 +199,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'test',
                             packageInstallationVersion: env.PODMAN_CD_VERSION,
-                            packageInstallationBuildGuid: env.BUILD_GUID
+                            packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
@@ -303,7 +303,7 @@ pipeline {
                 NR_BROKER_JWT = credentials('nr-broker-jwt')
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.USER_ID}"
-                BUILD_GUID = "${params.traceId}"
+                INTENTION_ID = "${params.intentionId}"
             }
             steps {
                 script {
@@ -316,7 +316,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'production',
                             packageInstallationVersion: env.PODMAN_CD_VERSION,
-                            packageInstallationBuildGuid: env.BUILD_GUID
+                            packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
