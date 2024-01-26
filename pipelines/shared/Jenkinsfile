@@ -85,7 +85,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do development deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -192,7 +192,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do test deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.TEST_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
@@ -309,7 +309,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do production deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/intention.json"))
+                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
