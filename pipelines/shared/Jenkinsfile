@@ -19,7 +19,7 @@ pipeline {
             }
             steps {
                 script {
-                    sh 'rm -rf app'
+                    // sh 'rm -rf app'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
