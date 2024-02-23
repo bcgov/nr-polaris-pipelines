@@ -101,7 +101,6 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/webade_encrypt_keystore", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         intention.startAction("configure")
@@ -209,7 +208,6 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/webade_encrypt_keystore", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         intention.startAction("configure")
@@ -327,7 +325,6 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/webade_encrypt_keystore", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         intention.startAction("configure")
