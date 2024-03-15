@@ -8,27 +8,46 @@ def podman
 pipeline {
     agent none
     stages {
-        stage('Checkout app repo') {
+        stage('Checkout app and download package') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
                 GIT_REPO = "${params.gitRepo}"
-                GIT_BRANCH = "${params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
+                GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
+                ARTIFACT_NAME = "${params.artifactName}"
+                ARTIFACT_SHA256 = "${params.artifactSha256}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
             }
             steps {
                 script {
                     sh 'rm -rf app'
+                    sh 'rm -rf downloads ; mkdir downloads'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
                     }
+                    def artifact_download_sha256 = sh(
+                        returnStdout: true,
+                        script: '''
+                            cd downloads
+                            ARTIFACT_DOWNLOAD_NAME=$(echo ${DOWNLOAD_URL##*/})
+                            REGEX="SNAPSHOT"
+                            if [[ "${ARTIFACT_NAME}" =~ "${REGEX}" ]]; then                            
+                                mv "${ARTIFACT_DOWNLOAD_NAME}" "${ARTIFACT_NAME}"
+                            fi
+                            sha256=($(sha256sum "${ARTIFACT_NAME}"))
+                            echo "${sha256}"
+                        ''' 
+                    )
                 }
             }
         }
@@ -59,8 +78,8 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
-                PODMAN_CD_VERSION = "${params.cdVersion}"
+                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -71,7 +90,8 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.devInventoryPath}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v1.0.4"}"
+                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
@@ -91,7 +111,7 @@ pipeline {
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
                             environment: 'development',
-                            packageInstallationVersion: env.PODMAN_CD_VERSION,
+                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
@@ -122,6 +142,7 @@ pipeline {
                                 -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
@@ -165,8 +186,8 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
-                PODMAN_CD_VERSION = "${params.cdVersion}"
+                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 TARGET_ENV = "${params.targetEnv}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
@@ -178,7 +199,8 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.testInventoryPath}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v1.0.4"}"
+                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
@@ -198,7 +220,7 @@ pipeline {
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
                             environment: 'test',
-                            packageInstallationVersion: env.PODMAN_CD_VERSION,
+                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
@@ -229,6 +251,7 @@ pipeline {
                                 -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
@@ -283,8 +306,8 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                ARTIFACTORY_BUILD_NUMBER = "${params.artifactoryBuildNumber}"
-                PODMAN_CD_VERSION = "${params.cdVersion}"
+                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -295,7 +318,8 @@ pipeline {
                 BROKER_URL = "https://nr-broker.apps.silver.devops.gov.bc.ca"
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 PODMAN_ANSIBLE_INVENTORY_PATH = "${params.prodInventoryPath}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v1.0.4"}"
+                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
@@ -315,7 +339,7 @@ pipeline {
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
                             environment: 'production',
-                            packageInstallationVersion: env.PODMAN_CD_VERSION,
+                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         intention.open(NR_BROKER_JWT)
@@ -346,6 +370,7 @@ pipeline {
                                 -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
