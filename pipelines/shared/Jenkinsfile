@@ -35,11 +35,11 @@ pipeline {
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
-                        if (env.DOWNLOAD_URL.contains('github')) {
+                        if (DOWNLOAD_URL.contains('github')) {
                             sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
                         }
                     }
-                    if (env.DOWNLOAD_URL.contains('github')) {
+                    if (DOWNLOAD_URL.contains('github')) {
                         def artifact_download_sha256 = sh(
                             returnStdout: true,
                             script: '''
@@ -130,7 +130,7 @@ pipeline {
                         // env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         // env.PODMAN_BUILD_URL = env.BUILD_URL
                         echo 'show progress on'
-                        if (env.DOWNLOAD_URL.contains('artifacts')) {
+                        if (DOWNLOAD_URL.contains('artifacts')) {
                             //wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME]]])
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]])
                             sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; cat *; cd ..'
