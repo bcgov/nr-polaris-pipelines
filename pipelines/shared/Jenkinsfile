@@ -131,10 +131,10 @@ pipeline {
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         echo 'show progress on'
-                        if (DOWNLOAD_URL.contains('artifacts')) {
-                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME]]])
-                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]])
-                            sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; cat *; cd ..'
+                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
+                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; cat *; cd ..'
+                            }
                         }
                         // intention.startAction("configure")
                         // def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
