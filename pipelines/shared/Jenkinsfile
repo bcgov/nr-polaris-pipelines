@@ -29,25 +29,31 @@ pipeline {
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
-                            sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
+                            if (DOWNLOAD_URL.contains('github')) {
+                                sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
+                            }
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
-                        sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
+                        if (DOWNLOAD_URL.contains('github')) {
+                            sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
+                        }
                     }
-                    def artifact_download_sha256 = sh(
-                        returnStdout: true,
-                        script: '''
-                            cd downloads
-                            ARTIFACT_DOWNLOAD_NAME=$(echo ${DOWNLOAD_URL##*/})
-                            REGEX="SNAPSHOT"
-                            if [[ "${ARTIFACT_NAME}" =~ "${REGEX}" ]]; then                            
-                                mv "${ARTIFACT_DOWNLOAD_NAME}" "${ARTIFACT_NAME}"
-                            fi
-                            sha256=($(sha256sum "${ARTIFACT_NAME}"))
-                            echo "${sha256}"
-                        ''' 
-                    )
+                    if (DOWNLOAD_URL.contains('github')) {
+                        def artifact_download_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                ARTIFACT_DOWNLOAD_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                REGEX="SNAPSHOT"
+                                if [[ "${ARTIFACT_NAME}" =~ "${REGEX}" ]]; then                            
+                                    mv "${ARTIFACT_DOWNLOAD_NAME}" "${ARTIFACT_NAME}"
+                                fi
+                                sha256=($(sha256sum "${ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            ''' 
+                        )
+                    }
                 }
             }
         }
@@ -100,6 +106,7 @@ pipeline {
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
             }
             steps {
                 script {
@@ -123,6 +130,11 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
+                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
+                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
+                            }
+                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
@@ -209,6 +221,7 @@ pipeline {
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.USER_ID}"
                 INTENTION_ID = "${params.intentionId}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
             }
             steps {
                 script {
@@ -232,6 +245,11 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
+                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
+                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
+                            }
+                        }                        
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
@@ -328,6 +346,7 @@ pipeline {
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.USER_ID}"
                 INTENTION_ID = "${params.intentionId}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
             }
             steps {
                 script {
@@ -351,6 +370,11 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
+                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
+                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
+                            }
+                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
