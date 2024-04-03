@@ -85,6 +85,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
@@ -106,7 +107,7 @@ pipeline {
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_URL = "${params.downloadUrl}"                
             }
             steps {
                 script {
@@ -199,6 +200,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 TARGET_ENV = "${params.targetEnv}"
                 PROJECT = "${params.project}"
@@ -325,6 +327,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
