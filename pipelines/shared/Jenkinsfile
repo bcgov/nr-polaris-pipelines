@@ -144,17 +144,13 @@ pipeline {
                                 echo "${sha256}"
                             '''
                         )
-                        echo downloaded_artifact_sha256
-                        PODMAN_ARTIFACT_SHA256 = '9045013e1ac5102779e280702976d8ac7c6b9c74'
-                        echo PODMAN_ARTIFACT_SHA256
-                        /*
                         if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
                             echo "SHA256 checksum matches!"
                         } else {
                             echo "SHA256 checksum failed"
                             currentBuild.result = 'ABORTED'
                             error('Quitting')
-                        } */
+                        } 
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
