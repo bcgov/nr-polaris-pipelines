@@ -136,6 +136,19 @@ pipeline {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
+                        def downloaded_artifact_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            '''
+                        )
+                        if (downloaded_artifact_sha256 != PODMAN_ARTIFACT_SHA256) {
+                            echo "SHA256 checksum failed"
+                            currentBuild.result = 'ABORTED'
+                            error('Quitting')
+                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
