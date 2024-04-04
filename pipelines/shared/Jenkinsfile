@@ -146,7 +146,9 @@ pipeline {
                         )
                         echo downloaded_artifact_sha256
                         echo PODMAN_ARTIFACT_SHA256
-                        if (downloaded_artifact_sha256 !== PODMAN_ARTIFACT_SHA256) {
+                        if (downloaded_artifact_sha256 == PODMAN_ARTIFACT_SHA256) {
+                            echo "SHA256 checksum matches!"
+                        } else {
                             echo "SHA256 checksum failed"
                             currentBuild.result = 'ABORTED'
                             error('Quitting')
