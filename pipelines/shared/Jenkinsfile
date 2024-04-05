@@ -107,7 +107,7 @@ pipeline {
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
-                DOWNLOAD_URL = "${params.downloadUrl}"                
+                DOWNLOAD_URL = "${params.downloadUrl}"
             }
             steps {
                 script {
