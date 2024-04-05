@@ -1,7 +1,8 @@
-@Library('polaris')
+@Library('polaris@feat/addDownloadCheckSum')
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
+import ca.bc.gov.nrids.polaris.JenkinsUtil
 
 def podman
 
@@ -136,14 +137,11 @@ pipeline {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
-                        def downloaded_artifact_sha256 = sh(
-                            returnStdout: true,
-                            script: '''
-                                cd downloads
-                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
-                                echo "${sha256}"
-                            '''
-                        )
+                        JenkinsUtil util = new JenkinsUtil()
+                        filename = './downloads/' + PODMAN_ARTIFACT_NAME                        
+                        String downloaded_artifact_sha256 = util.runSha256Command(filename)
+                        echo downloaded_artifact_sha256
+                        
                         if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
                             echo "SHA256 checksum matches!"
                         } else {
