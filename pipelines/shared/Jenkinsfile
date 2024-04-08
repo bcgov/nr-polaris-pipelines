@@ -25,6 +25,7 @@ pipeline {
                 script {
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
+                    echo DOWNLOAD_TYPE.toUpperCase().trim()
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
