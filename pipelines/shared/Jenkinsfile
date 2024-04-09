@@ -19,6 +19,7 @@ pipeline {
                 ARTIFACT_NAME = "${params.artifactName}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
             }
             steps {
                 script {
@@ -29,17 +30,17 @@ pipeline {
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
-                            if (DOWNLOAD_URL.contains('github')) {
+                            if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
                             }
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
-                        if (DOWNLOAD_URL.contains('github')) {
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                             sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
                         }
                     }
-                    if (DOWNLOAD_URL.contains('github')) {
+                    if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                         def artifact_download_sha256 = sh(
                             returnStdout: true,
                             script: '''
@@ -108,6 +109,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
             }
             steps {
                 script {
@@ -131,7 +133,7 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
@@ -239,6 +241,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.USER_ID}"
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
             }
             steps {
                 script {
@@ -262,7 +265,7 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
@@ -380,6 +383,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.USER_ID}"
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
             }
             steps {
                 script {
@@ -403,7 +407,7 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.ARTIFACTORY_BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_URL.contains('artifacts')) {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
