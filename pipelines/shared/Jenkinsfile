@@ -85,6 +85,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
@@ -134,6 +135,21 @@ pipeline {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
+                        }
+                        def downloaded_artifact_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            '''
+                        )
+                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
+                            echo "SHA256 checksum matches!"
+                        } else {
+                            echo "SHA256 checksum failed"
+                            currentBuild.result = 'ABORTED'
+                            error('Quitting')
                         }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
@@ -199,6 +215,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 TARGET_ENV = "${params.targetEnv}"
                 PROJECT = "${params.project}"
@@ -249,7 +266,22 @@ pipeline {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
-                        }                        
+                        }
+                        def downloaded_artifact_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            '''
+                        )
+                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
+                            echo "SHA256 checksum matches!"
+                        } else {
+                            echo "SHA256 checksum failed"
+                            currentBuild.result = 'ABORTED'
+                            error('Quitting')
+                        }                   
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
@@ -325,6 +357,7 @@ pipeline {
             }
             environment {
                 PODMAN_ARTIFACT_NAME = "${params.artifactName}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
@@ -374,6 +407,21 @@ pipeline {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
+                        }
+                        def downloaded_artifact_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            '''
+                        )
+                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
+                            echo "SHA256 checksum matches!"
+                        } else {
+                            echo "SHA256 checksum failed"
+                            currentBuild.result = 'ABORTED'
+                            error('Quitting')
                         }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
