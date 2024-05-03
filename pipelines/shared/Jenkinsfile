@@ -16,10 +16,9 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
-                ARTIFACT_NAME = "${params.artifactName}"
-                ARTIFACT_SHA256 = "${params.artifactSha256}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
+                ARTIFACT_SHA256 = "${params.artifactSha256}"
             }
             steps {
                 script {
@@ -44,15 +43,11 @@ pipeline {
                         def artifact_download_sha256 = sh(
                             returnStdout: true,
                             script: '''
+                                ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
                                 cd downloads
-                                ARTIFACT_DOWNLOAD_NAME=$(echo ${DOWNLOAD_URL##*/})
-                                REGEX="SNAPSHOT"
-                                if [[ "${ARTIFACT_NAME}" =~ "${REGEX}" ]]; then                            
-                                    mv "${ARTIFACT_DOWNLOAD_NAME}" "${ARTIFACT_NAME}"
-                                fi
                                 sha256=($(sha256sum "${ARTIFACT_NAME}"))
                                 echo "${sha256}"
-                            ''' 
+                            '''
                         )
                     }
                 }
@@ -85,9 +80,6 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
-                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
-                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -110,6 +102,8 @@ pipeline {
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
             }
             steps {
                 script {
@@ -133,11 +127,18 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
+                        env.PODMAN_ARTIFACT_NAME = sh(
+                            returnStdout: true,
+                            script: '''
+                                ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                echo -n "${ARTIFACT_NAME}"
+                            '''
+                        )
                         def downloaded_artifact_sha256 = sh(
                             returnStdout: true,
                             script: '''
@@ -216,10 +217,6 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
-                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
-                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                TARGET_ENV = "${params.targetEnv}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -242,6 +239,8 @@ pipeline {
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
             }
             steps {
                 script {
@@ -265,11 +264,18 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
+                        env.PODMAN_ARTIFACT_NAME = sh(
+                            returnStdout: true,
+                            script: '''
+                                ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                echo -n "${ARTIFACT_NAME}"
+                            '''
+                        )
                         def downloaded_artifact_sha256 = sh(
                             returnStdout: true,
                             script: '''
@@ -284,7 +290,7 @@ pipeline {
                             echo "SHA256 checksum failed"
                             currentBuild.result = 'ABORTED'
                             error('Quitting')
-                        }                   
+                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
@@ -359,9 +365,6 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                PODMAN_ARTIFACT_NAME = "${params.artifactName}"
-                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
-                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PROJECT = "${params.project}"
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
@@ -384,6 +387,8 @@ pipeline {
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
             }
             steps {
                 script {
@@ -407,11 +412,18 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {                            
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
+                        env.PODMAN_ARTIFACT_NAME = sh(
+                            returnStdout: true,
+                            script: '''
+                                ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                echo -n "${ARTIFACT_NAME}"
+                            '''
+                        )
                         def downloaded_artifact_sha256 = sh(
                             returnStdout: true,
                             script: '''
