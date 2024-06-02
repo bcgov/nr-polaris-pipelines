@@ -161,6 +161,9 @@ pipeline {
                         vaultApp.revokeToken()
                         intention.endAction("configure")
                         intention.startAction("install")
+                        intention.openResponse.actions.each { key, value ->
+                            env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
+                        }
                         podman = new Podman(this)
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.12-alpine-3.16",
@@ -174,7 +177,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_*",
+                                -e PODMAN_* -e ACTION_TOKEN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                         podman.logout(authfile: "${env.AUTHFILE}")
