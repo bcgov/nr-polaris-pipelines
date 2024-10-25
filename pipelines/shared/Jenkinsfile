@@ -104,7 +104,6 @@ pipeline {
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                POLARIS_JOB_ID = "${params.polarisJobId != null && params.polarisJobId != "" ? params.polarisJobId : params.component}"
             }
             steps {
                 script {
@@ -178,7 +177,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e POLARIS_*",
+                                -e PODMAN_* -e ACTION_TOKEN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                         podman.logout(authfile: "${env.AUTHFILE}")
@@ -245,7 +244,6 @@ pipeline {
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                POLARIS_JOB_ID = "${params.polarisJobId != null && params.polarisJobId != "" ? params.polarisJobId : params.component}"
             }
             steps {
                 script {
@@ -319,7 +317,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e POLARIS_*",
+                                -e PODMAN_* -e ACTION_TOKEN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
                         podman.logout(authfile: "${env.AUTHFILE}")
@@ -397,7 +395,6 @@ pipeline {
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                POLARIS_JOB_ID = "${params.polarisJobId != null && params.polarisJobId != "" ? params.polarisJobId : params.component}"
             }
             steps {
                 script {
@@ -471,7 +468,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e POLARIS_*",
+                                -e PODMAN_* -e ACTION_TOKEN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
                         podman.logout(authfile: "${env.AUTHFILE}")
