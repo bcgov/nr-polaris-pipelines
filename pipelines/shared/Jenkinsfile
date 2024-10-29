@@ -177,7 +177,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_*",
+                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
                         podman.logout(authfile: "${env.AUTHFILE}")
@@ -317,7 +317,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_*",
+                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
                         podman.logout(authfile: "${env.AUTHFILE}")
@@ -468,7 +468,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_*",
+                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
                         podman.logout(authfile: "${env.AUTHFILE}")
