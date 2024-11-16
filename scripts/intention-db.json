@@ -1,0 +1,37 @@
+{
+  "event": {
+    "provider": "",
+    "reason": "Job triggered",
+    "url": ""
+  },
+  "actions": [
+    {
+      "action": "server-access",
+      "id": "login",
+      "provision": ["token/self"],
+      "service": {
+        "name": "",
+        "project": "",
+        "environment": "",
+        "target": {
+          "name": "nr-database-migration",
+          "project": "db-pipeline",
+          "environment": "production"
+        }
+      }
+    },
+    {
+      "action": "database-access",
+      "id": "database",
+      "provision": ["token/self"],
+      "service": {
+        "name": "",
+        "project": "",
+        "environment": ""
+      }
+    }
+  ],
+  "user": {
+    "name": ""
+  }
+}
