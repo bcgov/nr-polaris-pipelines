@@ -96,7 +96,7 @@ pipeline {
                 GIT_CREDS = credentials('ci-user')
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
-                NR_BROKER_JWT = credentials('nr-broker-jwt')
+                NR_BROKER_JWT = "${params.brokerJwt}"
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
