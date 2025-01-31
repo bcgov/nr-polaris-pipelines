@@ -47,7 +47,7 @@ pipeline {
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
-                CONFIG_ROLE_ID = credentials('knox-jasper-jasper-reports-prod-role-id')
+                CONFIG_ROLE_ID = credentials('knox-jasper-jasper-reports-dev-role-id')
                 JASPER_REPORTS_INSTANCE = "${params.jasperReportsInstance}"
             }
             steps {
@@ -59,14 +59,16 @@ pipeline {
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
-                            environment: 'development'
+                            environment: 'development',
+                            serviceTargetEnvironment: 'development'
                         )
                         BROKER_JWT = "${params.brokerJwt}"
                         intention.open(BROKER_JWT)
                         intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
-                        vault.readToObject("apps/data/prod/jasper/jasper-reports/${params.jasperReportsInstance}", env)
+                        vault.readToObject("apps/data/dev/jasper/jasper-reports/${params.jasperReportsInstance}", env)
+                        println "Hello from ${env.hello}"
                     } catch (IllegalStateException ex) {
                         echo "IllegalStateException occurred: $ex"
                         currentBuild.result = 'ABORTED'
@@ -111,7 +113,7 @@ pipeline {
                 HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 AUTHFILE = "auth.json"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
-                CONFIG_ROLE_ID = credentials('knox-jasper-jasper-reports-prod-role-id')
+                CONFIG_ROLE_ID = credentials('knox-jasper-jasper-reports-test-role-id')
                 JASPER_REPORTS_INSTANCE = "${params.jasperReportsInstance}"
             }
             steps {
@@ -123,14 +125,15 @@ pipeline {
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
-                            environment: 'test'
+                            environment: 'test',
+                            serviceTargetEnvironment: 'test'
                         )
                         BROKER_JWT = "${params.brokerJwt}"
                         intention.open(BROKER_JWT)
                         intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
-                        vault.readToObject("apps/data/prod/jasper/jasper-reports/${params.jasperReportsInstance}", env)
+                        vault.readToObject("apps/data/test/jasper/jasper-reports/${params.jasperReportsInstance}", env)
                     } catch (IllegalStateException ex) {
                         echo "IllegalStateException occurred: $ex"
                         currentBuild.result = 'ABORTED'
@@ -198,12 +201,13 @@ pipeline {
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
-                            environment: 'production'
+                            environment: 'production',
+                            serviceTargetEnvironment: 'production'
                         )
                         BROKER_JWT = "${params.brokerJwt}"
                         intention.open(BROKER_JWT)
                         intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
                         vault.readToObject("apps/data/prod/jasper/jasper-reports/${params.jasperReportsInstance}", env)
                     } catch (IllegalStateException ex) {
