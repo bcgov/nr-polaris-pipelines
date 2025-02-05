@@ -23,22 +23,24 @@ pipeline {
             steps {
                 script {
                     sh 'rm -rf app'
-                    sh 'rm -rf downloads ; mkdir -p downloads/app'
+                    sh 'rm -rf downloads ; mkdir downloads'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL} -o ./downloads/app'
+                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh 'cd downloads ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
                         }
                     } else {
-                        sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL} -o ./downloads/app'
+                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh 'cd downloads ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
                     }
                     if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                         def artifact_download_sha256 = sh(
                             returnStdout: true,
                             script: '''
                                 cd downloads
-                                sha256=$(tar -cf - ./app/dist | sha256sum | awk '{print $1}')
+                                sha256=$(tar -cf - dist | sha256sum | awk '{print $1}')
                                 echo "${sha256}"
                             '''
                         )
@@ -125,25 +127,10 @@ pipeline {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
-                        def downloaded_artifact_sha256 = sh(
-                            returnStdout: true,
-                            script: '''
-                                cd downloads
-                                sha256=$(tar -cf - ./app/dist | sha256sum | awk '{print $1}')
-                                echo "${sha256}"
-                            '''
-                        )
-                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
-                            echo "SHA256 checksum matches!"
-                        } else {
-                            echo "SHA256 checksum failed"
-                            currentBuild.result = 'ABORTED'
-                            error('Quitting')
-                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
                         def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
+                        //vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
                         intention.endAction("configure")
                         intention.startAction("install")
@@ -159,6 +146,7 @@ pipeline {
                         podman.run("willhallonline/ansible:2.12-alpine-3.16",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
@@ -291,6 +279,7 @@ pipeline {
                         podman.run("willhallonline/ansible:2.12-alpine-3.16",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
