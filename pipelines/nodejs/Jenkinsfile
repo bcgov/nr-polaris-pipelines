@@ -14,7 +14,6 @@ pipeline {
             }
             environment {
                 GIT_REPO = "${params.gitRepo}"
-                GIT_REPONAME=sh(script: 'basename -s .git "$GIT_REPO"', returnStdout: true).trim()
                 GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
@@ -26,7 +25,7 @@ pipeline {
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir -p downloads/app'
                     if (env.GITHUB_PRIVATE_REPO) {
-                        env.GITHUB_USER = "${params.githubUser}" githubUser
+                        env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'echo ${GITHUB_TOKEN} | oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; oras pull ${DOWNLOAD_URL} -o ./downloads/app'
