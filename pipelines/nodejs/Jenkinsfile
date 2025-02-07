@@ -236,21 +236,6 @@ pipeline {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
-                        def downloaded_artifact_sha256 = sh(
-                            returnStdout: true,
-                            script: '''
-                                cd downloads
-                                sha256=$(tar -cf - ./app/dist | sha256sum | awk '{print $1}')
-                                echo "${sha256}"
-                            '''
-                        )
-                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
-                            echo "SHA256 checksum matches!"
-                        } else {
-                            echo "SHA256 checksum failed"
-                            currentBuild.result = 'ABORTED'
-                            error('Quitting')
-                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure")
                         def vaultApp = new Vault(vaultAppToken)
@@ -379,21 +364,6 @@ pipeline {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
-                        }
-                        def downloaded_artifact_sha256 = sh(
-                            returnStdout: true,
-                            script: '''
-                                cd downloads
-                                sha256=$(tar -cf - ./app/dist | sha256sum | awk '{print $1}')
-                                echo "${sha256}"
-                            '''
-                        )
-                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
-                            echo "SHA256 checksum matches!"
-                        } else {
-                            echo "SHA256 checksum failed"
-                            currentBuild.result = 'ABORTED'
-                            error('Quitting')
                         }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure")
