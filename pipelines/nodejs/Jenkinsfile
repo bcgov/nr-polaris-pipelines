@@ -23,18 +23,18 @@ pipeline {
             steps {
                 script {
                     sh 'rm -rf app'
-                    sh 'rm -rf downloads ; mkdir downloads'
+                    sh 'rm -rf downloads ; mkdir -p downloads/app'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
-                            sh 'cd downloads ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
-                            sh 'ls -l downloads'
+                            sh 'cd downloads/app ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
+                            sh 'ls -l downloads/app'
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
-                        sh 'cd downloads ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
+                        sh 'cd downloads/app ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
                     }
                 }
             }
