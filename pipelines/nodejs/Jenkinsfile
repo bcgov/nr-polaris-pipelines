@@ -36,6 +36,18 @@ pipeline {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
                         sh 'cd downloads/app ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
                     }
+                    def artifact_download_sha256 = sh(
+                        script: "find downloads/app/dist -type f -exec sha256sum {} + | awk '{print \$1}' | sort | sha256sum | awk '{print \$1}'",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Computed Nodejs SHA-256: ${artifact_download_sha256}"
+
+                    if (artifact_download_sha256 != ARTIFACT_SHA256) {
+                        error "Checksum verification failed!"
+                    } else {
+                        echo "Checksum verification passed!"
+                    }
                 }
             }
         }
