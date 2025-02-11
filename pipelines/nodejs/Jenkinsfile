@@ -36,27 +36,20 @@ pipeline {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     }
-                    def pullOutput = sh(
+                    def download_sha256 = sh(
                         returnStdout: true,
                         script: '''
                             cd downloads/app
-                            /sw_ux/bin/oras pull ${DOWNLOAD_URL} 2>&1
+                            output=$(/sw_ux/bin/oras pull ${DOWNLOAD_URL} --format go-template='{{toRawJson .}}')
+                            sha256=$(echo "${output}"| jq -r '.files[] | select(.annotations["org.opencontainers.image.title"] == "dist") | .digest | split(":")[1]')
+                            echo "${sha256}"
                         '''
-                    ).trim()
-                    echo "ORAS pull output: ${pullOutput}"
+                    )
 
-                    def match_sha256 = (pullOutput =~ /Downloaded  ([a-f0-9]+) dist/)
-
-                    if (match_sha256.find()) {
-                        def computed_sha256 = match_sha256.group(1)
-                        echo "Extracted dist SHA-256: ${computed_sha256}"
-                        if (computed_sha256 != ARTIFACT_SHA256.substring(0, 12)) {
-                            error "Checksum verification failed!"
-                        } else {
-                            echo "Checksum verification passed!"
-                        }
+                    if (download_sha256 != ARTIFACT_SHA256) {
+                        error "Checksum verification failed!"
                     } else {
-                        echo "SHA-256 digest for 'dist' folder not found in ORAS pull output!"
+                        echo "Checksum verification passed!"
                     }
                 }
             }
