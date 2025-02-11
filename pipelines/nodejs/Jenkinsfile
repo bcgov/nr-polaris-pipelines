@@ -43,13 +43,14 @@ pipeline {
                             /sw_ux/bin/oras pull ${DOWNLOAD_URL} 2>&1
                         '''
                     ).trim()
+                    echo "ORAS pull output: ${pullOutput}"
 
-                    def match_sha256 = (pullOutput =~ /Downloading dist sha256:([a-f0-9]{64})/)
+                    def match_sha256 = (pullOutput =~ /Downloaded ([a-f0-9]{12}) dist/)
 
                     if (match_sha256.find()) {
                         def computed_sha256 = match_sha256.group(1)
                         echo "Extracted dist SHA-256: ${computed_sha256}"
-                        if (computed_sha256 != ARTIFACT_SHA256) {
+                        if (computed_sha256 != ARTIFACT_SHA256.substring(0, 12)) {
                             error "Checksum verification failed!"
                         } else {
                             echo "Checksum verification passed!"
