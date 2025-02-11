@@ -40,7 +40,7 @@ pipeline {
                         returnStdout: true,
                         script: '''
                             cd downloads/app
-                            /sw_ux/bin/oras pull ${DOWNLOAD_URL} 2>$1
+                            /sw_ux/bin/oras pull ${DOWNLOAD_URL} 2>&1
                         '''
                     ).trim()
 
