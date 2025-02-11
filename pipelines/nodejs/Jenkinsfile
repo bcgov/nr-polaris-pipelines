@@ -24,7 +24,6 @@ pipeline {
                 script {
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir -p downloads/app'
-                    def match_sha256=""
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
@@ -45,7 +44,7 @@ pipeline {
                         '''
                     ).trim()
 
-                    match_sha256 = (pullOutput =~ /Downloading dist sha256:([a-f0-9]{64})/)
+                    def match_sha256 = (pullOutput =~ /Downloading dist sha256:([a-f0-9]{64})/)
 
                     if (match_sha256.find()) {
                         def computed_sha256 = match_sha256.group(1)
