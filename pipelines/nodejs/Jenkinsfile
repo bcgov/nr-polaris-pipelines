@@ -46,7 +46,7 @@ pipeline {
                         '''
                     )
 
-                    if (download_sha256 != ARTIFACT_SHA256) {
+                    if (download_sha256.trim() != ARTIFACT_SHA256.trim()) {
                         error "Checksum verification failed!"
                     } else {
                         echo "Checksum verification passed!"
