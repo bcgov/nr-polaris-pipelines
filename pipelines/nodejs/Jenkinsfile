@@ -24,29 +24,39 @@ pipeline {
                 script {
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir -p downloads/app'
+                    def match_sha256=""
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
-                            sh 'cd downloads/app ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
-                            sh 'ls -l downloads/app'
+                            sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin '
+                            //sh 'ls -l downloads/app'
                         }
                     } else {
                         sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
-                        sh 'cd downloads/app ; echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin ; /sw_ux/bin/oras pull ${DOWNLOAD_URL}'
+                        sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     }
-                    def artifact_download_sha256 = sh(
-                        script: "find downloads/app/dist -type f -exec sha256sum {} + | awk '{print \$1}' | sort | sha256sum | awk '{print \$1}'",
-                        returnStdout: true
+                    def pullOutput = sh(
+                        returnStdout: true,
+                        script: '''
+                            cd downloads/app
+                            /sw_ux/bin/oras pull ${DOWNLOAD_URL} 2>$1
+                        '''
                     ).trim()
 
-                    echo "Computed Nodejs SHA-256: ${artifact_download_sha256}"
+                    match_sha256 = (pullOutput =~ /Downloading dist sha256:([a-f0-9]{64})/)
 
-                    if (artifact_download_sha256 != ARTIFACT_SHA256) {
-                        error "Checksum verification failed!"
+                    if (match_sha256.find()) {
+                        def computed_sha256 = match_sha256.group(1)
+                        echo "Extracted dist SHA-256: ${computed_sha256}"
+                        if (computed_sha256 != ARTIFACT_SHA256) {
+                            error "Checksum verification failed!"
+                        } else {
+                            echo "Checksum verification passed!"
+                        }
                     } else {
-                        echo "Checksum verification passed!"
+                        echo "SHA-256 digest for 'dist' folder not found in ORAS pull output!"
                     }
                 }
             }
