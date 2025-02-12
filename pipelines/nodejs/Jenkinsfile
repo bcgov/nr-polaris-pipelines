@@ -51,7 +51,7 @@ pipeline {
                     } else {
                         echo "Checksum verification passed!"
                     }
-                    sh 'ls -l downloads/app'
+                    sh 'ls -l ${pwd}/downloads/app'
                 }
             }
         }
@@ -157,6 +157,7 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
+                                -v \$(pwd)/downloads/app:/ansible/downloads/app \
                                 -v \$(pwd)/downloads/tmp:/ansible/tmp \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
