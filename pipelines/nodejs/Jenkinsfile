@@ -51,7 +51,7 @@ pipeline {
                     } else {
                         echo "Checksum verification passed!"
                     }
-                    sh 'ls -l ${pwd}/downloads/app'
+                    sh 'ls -l downloads/app'
                 }
             }
         }
