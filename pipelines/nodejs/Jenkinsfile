@@ -23,7 +23,7 @@ pipeline {
             steps {
                 script {
                     sh 'rm -rf app'
-                    sh 'rm -rf downloads ; mkdir -p downloads/app; mkdir -p downloads/tmp'
+                    sh 'rm -rf downloads ; mkdir -p downloads/app'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
@@ -157,8 +157,6 @@ pipeline {
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
-                                -v \$(pwd)/downloads/app:/ansible/downloads/app \
-                                -v \$(pwd)/downloads/tmp:/ansible/tmp \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
