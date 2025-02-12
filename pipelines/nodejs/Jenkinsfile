@@ -40,7 +40,7 @@ pipeline {
                         returnStdout: true,
                         script: '''
                             cd downloads/app
-                            output=$(/sw_ux/bin/oras pull ${DOWNLOAD_URL} --format go-template='{{toRawJson .}}')
+                            output=$(/sw_ux/bin/oras pull ${DOWNLOAD_URL} --format go-template='{{toRawJson .}}' 2>/dev/null)
                             sha256=$(echo "${output}"| jq -r '.files[] | select(.annotations["org.opencontainers.image.title"] == "dist") | .digest | split(":")[1]')
                             echo "${sha256}"
                         '''
