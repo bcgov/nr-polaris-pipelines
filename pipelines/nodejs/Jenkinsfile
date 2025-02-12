@@ -51,8 +51,6 @@ pipeline {
                     } else {
                         echo "Checksum verification passed!"
                     }
-
-                    sh 'cd downloads/app ; zip -r ../app.zip * ; cd .. ; ls -l *; cd ..'
                 }
             }
         }
