@@ -5,6 +5,7 @@ import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
 def intention
+def podman
 
 pipeline {
     agent {
