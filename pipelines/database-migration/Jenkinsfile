@@ -4,8 +4,9 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
-def intention
 def env_short = JenkinsUtil.convertLongEnvToShort("${params.environment}")
+def intention
+def podman
 
 pipeline {
     agent {
