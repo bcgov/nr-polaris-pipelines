@@ -258,7 +258,7 @@ pipeline {
                 EVENT_PROVIDER = "${params.eventProvider}"
                 VAULT_ADDR = "https://knox.io.nrs.gov.bc.ca"
                 BROKER_URL = "https://broker.io.nrs.gov.bc.ca"
-                HTTPS_PROXY = "http://forwardproxy.nrs.bcgov:23128"
+                HTTPS_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 NO_PROXY = "apps.nrs.bcgov"
                 AUTHFILE = "auth.json"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v2.3.0"}"
