@@ -48,7 +48,7 @@ pipeline {
                 HTTPS_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 NO_PROXY = "knox.io.nrs.gov.bc.ca,dlvrapps.nrs.bcgov"
                 AUTHFILE = "auth.json"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v2.3.1"}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : "main"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
@@ -89,11 +89,11 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags create_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags deploy_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
@@ -149,7 +149,7 @@ pipeline {
                 HTTPS_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 NO_PROXY = "knox.io.nrs.gov.bc.ca,testapps.nrs.bcgov"
                 AUTHFILE = "auth.json"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v2.3.1"}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : "main"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
@@ -190,11 +190,11 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags create_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags deploy_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
@@ -261,7 +261,7 @@ pipeline {
                 HTTPS_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
                 NO_PROXY = "knox.io.nrs.gov.bc.ca,apps.nrs.bcgov"
                 AUTHFILE = "auth.json"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v2.3.1"}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : "main"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
@@ -302,11 +302,11 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags create_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags deploy_packages')
+                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
