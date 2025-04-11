@@ -3,6 +3,7 @@ import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
 
+def intention
 def podman
 
 pipeline {
@@ -117,8 +118,8 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        NR_BROKER_JWT = "${params.brokerJwt}"
-                        intention.open(NR_BROKER_JWT)
+                        def brokerJwt = "${params.brokerJwt}"
+                        intention.open(brokerJwt)
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -257,8 +258,8 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        NR_BROKER_JWT = "${params.brokerJwt}"
-                        intention.open(NR_BROKER_JWT)
+                        def brokerJwt = "${params.brokerJwt}"
+                        intention.open(brokerJwt)
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -408,8 +409,8 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        NR_BROKER_JWT = "${params.brokerJwt}"
-                        intention.open(NR_BROKER_JWT)
+                        def brokerJwt = "${params.brokerJwt}"
+                        intention.open(brokerJwt)
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
