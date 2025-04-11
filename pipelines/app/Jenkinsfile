@@ -167,11 +167,11 @@ pipeline {
                         }
                         podman = new Podman(this)
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd):/ansible -e PODMAN_*",
                             command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/app:/ansible/app \
@@ -307,11 +307,11 @@ pipeline {
                         }
                         podman = new Podman(this)
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd):/ansible -e PODMAN_*",
                             command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/app:/ansible/app \
@@ -458,11 +458,11 @@ pipeline {
                         }
                         podman = new Podman(this)
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd):/ansible -e PODMAN_*",
                             command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                        podman.run("willhallonline/ansible:2.12-alpine-3.16",
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/app:/ansible/app \
