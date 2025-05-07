@@ -21,7 +21,7 @@ pipeline {
                     echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/jasper-reports"
                     echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
                     echo ""
-                    echo "Developers are expected to review the documenation of all roles used by their Ansible playbook file."
+                    echo "Developers are expected to review the documentation of all roles used by their Ansible playbook file."
                 }
             }
         }
