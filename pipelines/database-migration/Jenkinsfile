@@ -42,6 +42,19 @@ pipeline {
         AUTHFILE = "auth.json"
     }
     stages {
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "Standard database migration pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/database-migration"
+                }
+            }
+        }
         stage('Setup') {
             steps {
                 script {

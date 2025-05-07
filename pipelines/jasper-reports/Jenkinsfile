@@ -9,6 +9,22 @@ def podman
 pipeline {
     agent none
     stages {
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "Standard Jasper report deployment pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/jasper-reports"
+                    echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
+                    echo ""
+                    echo "Developers are expected to review the documenation of all roles used by their Ansible playbook file."
+                }
+            }
+        }
         stage('Checkout app') {
             agent {
                 label Podman.AGENT_LABEL_APP
