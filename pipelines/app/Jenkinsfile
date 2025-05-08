@@ -180,7 +180,7 @@ pipeline {
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml --extra-vars "env_vars=dev"')
+                                app/playbooks/playbook.yaml -e "env_vars=dev" -e "proxy_env=dev"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
@@ -320,7 +320,7 @@ pipeline {
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml --extra-vars "env_vars=test"')
+                                app/playbooks/playbook.yaml -e "env_vars=test" -e "proxy_env=test"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
@@ -471,7 +471,7 @@ pipeline {
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml --extra-vars "env_vars=prod"')
+                                app/playbooks/playbook.yaml -e "env_vars=prod" -e "proxy_env=prod"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
