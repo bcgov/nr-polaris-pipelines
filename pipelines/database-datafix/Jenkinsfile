@@ -13,8 +13,6 @@ pipeline {
     }
     environment {
         PATH = "/sw_ux/bin:$PATH"
-        VAULT_ADDR = "https://knox.io.nrs.gov.bc.ca"
-        BROKER_URL = "https://broker.io.nrs.gov.bc.ca"
         TARGET_ENV = "production"
         GH_REPO = "${params.githubRepo}"
         OWNER = GH_REPO.substring(0, GH_REPO.lastIndexOf("/"))
