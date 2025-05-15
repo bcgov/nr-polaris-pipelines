@@ -9,6 +9,22 @@ def podman
 pipeline {
     agent none
     stages {
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "Standard on-premise maven artifact application deployment pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/app"
+                    echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
+                    echo ""
+                    echo "Developers are expected to review the documentation of all roles used by their Ansible playbook file."
+                }
+            }
+        }
         stage('Checkout app and download package') {
             agent {
                 label Podman.AGENT_LABEL_APP
@@ -23,6 +39,8 @@ pipeline {
             }
             steps {
                 script {
+                    echo 'NR POLARIS - Checkout app and download package'
+                    echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
                     if (env.GITHUB_PRIVATE_REPO) {
@@ -206,7 +224,7 @@ pipeline {
         stage('Approve test deployment') {
             steps {
 	            script {
-                    echo "Deployment to test pending approval"
+                    echo "Deployment to test pending approval."
                     def approver = input(message: 'Is this build approved for test?',
                         ok: 'Yes, this build is approved.',
                         submitterParameter: 'approver'
