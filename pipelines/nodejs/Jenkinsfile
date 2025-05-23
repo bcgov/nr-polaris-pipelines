@@ -94,7 +94,7 @@ pipeline {
                 ])
             }
         }
-        stage('Deploy to development') {
+        stage('Deploy') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
@@ -104,16 +104,17 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
                 EVENT_PROVIDER = "${params.eventProvider}"
-                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.devInventoryPath}"
+                ENVIRONMENT = "${params.environment}"
+                ENV_SHORT = "${params.envShort}"
+                HTTP_PROXY = "${params.httpProxy}"
+                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.inventoryPath}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.0.2"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
-                CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
                 AUTHFILE = "auth.json"
-                CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
+                CAUSE_USER_ID = "${params.userId}"
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
@@ -129,14 +130,14 @@ pipeline {
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
-                            environment: 'development',
+                            environment: env.ENVIRONMENT,
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
                         NR_BROKER_JWT = "${params.brokerJwt}"
                         intention.open(NR_BROKER_JWT)
                         intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                        def vaultToken = intention.provisionToken("login")
                         def vault = new Vault(vaultToken)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
@@ -151,7 +152,7 @@ pipeline {
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure")
                         def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
+                        vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
                         intention.endAction("configure")
                         intention.startAction("install")
@@ -173,253 +174,13 @@ pipeline {
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml -e "env_vars=dev" -e "proxy_env=dev"')
+                                app/playbooks/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
                         intention.endAction("login")
                         println intention.close(true)
                         intention = null
-                    } catch (IllegalStateException ex) {
-                        echo "IllegalStateException occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    } catch (IllegalArgumentException ex) {
-                        echo "IllegalArgumentException occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    } catch (Exception ex) {
-                        echo "Other exception occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    }
-                }
-            }
-        }
-        stage('Approve test deployment') {
-            steps {
-	            script {
-                    echo "Deployment to test pending approval"
-                    def approver = input(message: 'Is this build approved for test?',
-                        ok: 'Yes, this build is approved.',
-                        submitterParameter: 'approver'
-                        )
-                    env.TEST_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
-                    echo "Deployment approved for test by ${env.TEST_DEPLOYMENT_APPROVER}"
-                }
-            }
-        }
-        stage('Deploy to test') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            environment {
-                PROJECT = "${params.project}"
-                COMPONENT = "${params.component}"
-                GIT_REPO = "${params.gitRepo}"
-                GIT_BRANCH = "${params.gitBranch}"
-                EVENT_PROVIDER = "${params.eventProvider}"
-                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.testInventoryPath}"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.0.2"}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
-                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
-                GIT_CREDS = credentials('ci-user')
-                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
-                CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
-                AUTHFILE = "auth.json"
-                CAUSE_USER_ID = "${params.USER_ID}"
-                INTENTION_ID = "${params.intentionId}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
-                DOWNLOAD_TYPE =" ${params.downloadType}"
-                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
-                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-            }
-            steps {
-                script {
-                    try {
-                        echo 'Do test deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
-                        intention.setEventDetails(
-                            userName: "${env.TEST_DEPLOYMENT_APPROVER}",
-                            url: env.BUILD_URL,
-                            provider: env.EVENT_PROVIDER,
-                            environment: 'test',
-                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
-                            packageInstallationSourceIntention: env.INTENTION_ID
-                        )
-                        NR_BROKER_JWT = "${params.brokerJwt}"
-                        intention.open(NR_BROKER_JWT)
-                        intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
-                        def vault = new Vault(vaultToken)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                        env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
-                        env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
-                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
-                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
-                            }
-                        }
-                        intention.startAction("configure")
-                        def vaultAppToken = intention.provisionToken("configure")
-                        def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.readToObject("apps/data/test/${env.PROJECT}/${env.COMPONENT}/test", env, keyTransform: { key -> 'PODMAN_' + key })
-                        vaultApp.revokeToken()
-                        intention.endAction("configure")
-                        intention.startAction("install")
-                        intention.openResponse.actions.each { key, value ->
-                            env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
-                        }
-                        podman = new Podman(this)
-                        podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd):/ansible -e PODMAN_*",
-                            command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app:/ansible/app \
-                                -v \$(pwd)/infra/inventory:/ansible/inventory \
-                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                                -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
-                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml -e "env_vars=test" -e "proxy_env=test"')
-                        podman.logout(authfile: "${env.AUTHFILE}")
-                        intention.endAction("install")
-                        vault.revokeToken()
-                        intention.endAction("login")
-                        println intention.close(true)
-                        intention = null
-                    } catch (IllegalStateException ex) {
-                        echo "IllegalStateException occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    } catch (IllegalArgumentException ex) {
-                        echo "IllegalArgumentException occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    } catch (Exception ex) {
-                        echo "Other exception occurred: $ex"
-                        currentBuild.result = 'ABORTED'
-                        error('Quitting')
-                    }
-                }
-            }
-        }
-        stage('Pre-deployment checks for production') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            steps {
-                script {
-                    // TODO: Exit pipeline for SNAPSHOT builds, which should NOT proceed beyond the test environment
-                    echo 'Do pre-deployment checks for production'
-                }
-            }
-        }
-        stage('Approve production deployment') {
-            steps {
-	            script {
-                    echo "Deployment to production pending approval"
-                    def approver = input(message: 'Is this build approved for production?',
-                        ok: 'Yes, this build is approved.',
-                        submitterParameter: 'approver'
-                        )
-                    env.PRODUCTION_DEPLOYMENT_APPROVER = "${approver}@azureidir".toLowerCase()
-                    echo "Deployment approved for production by ${env.PRODUCTION_DEPLOYMENT_APPROVER}"
-                }
-            }
-        }
-        stage('Deploy to production') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            environment {
-                PROJECT = "${params.project}"
-                COMPONENT = "${params.component}"
-                GIT_REPO = "${params.gitRepo}"
-                GIT_BRANCH = "${params.gitBranch}"
-                EVENT_PROVIDER = "${params.eventProvider}"
-                HTTP_PROXY = "http://test-forwardproxy.nrs.bcgov:23128"
-                PODMAN_ANSIBLE_INVENTORY_PATH = "${params.prodInventoryPath}"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.0.2"}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
-                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
-                GIT_CREDS = credentials('ci-user')
-                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
-                CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
-                AUTHFILE = "auth.json"
-                CAUSE_USER_ID = "${params.USER_ID}"
-                INTENTION_ID = "${params.intentionId}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
-                DOWNLOAD_TYPE =" ${params.downloadType}"
-                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
-                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-            }
-            steps {
-                script {
-                    try {
-                        echo 'Do production deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
-                        intention.setEventDetails(
-                            userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
-                            url: env.BUILD_URL,
-                            provider: env.EVENT_PROVIDER,
-                            environment: 'production',
-                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
-                            packageInstallationSourceIntention: env.INTENTION_ID
-                        )
-                        NR_BROKER_JWT = "${params.brokerJwt}"
-                        intention.open(NR_BROKER_JWT)
-                        intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
-                        def vault = new Vault(vaultToken)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                        env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
-                        env.PODMAN_BUILD_URL = env.BUILD_URL
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
-                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
-                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
-                            }
-                        }
-                        intention.startAction("configure")
-                        def vaultAppToken = intention.provisionToken("configure")
-                        def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.readToObject("apps/data/prod/${env.PROJECT}/${env.COMPONENT}/production", env, keyTransform: { key -> 'PODMAN_' + key})
-                        vaultApp.revokeToken()
-                        intention.endAction("configure")
-                        intention.startAction("install")
-                        intention.openResponse.actions.each { key, value ->
-                            env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
-                        }
-                        podman = new Podman(this)
-                        podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd):/ansible -e PODMAN_*",
-                            command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app:/ansible/app \
-                                -v \$(pwd)/infra/inventory:/ansible/inventory \
-                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                                -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
-                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml -e "env_vars=prod" -e "proxy_env=prod"')
-                        podman.logout(authfile: "${env.AUTHFILE}")
-                        intention.endAction("install")
-                        vault.revokeToken()
-                        intention.endAction("login")
-                        println intention.close(true)
                     } catch (IllegalStateException ex) {
                         echo "IllegalStateException occurred: $ex"
                         currentBuild.result = 'ABORTED'
