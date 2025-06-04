@@ -116,7 +116,6 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
                 ENV_SHORT = "${params.envShort}"
-
                 EVENT_PROVIDER = "${params.eventProvider}"
                 HTTP_PROXY = "${params.envShort == 'prod' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.0.2"}"
@@ -167,7 +166,7 @@ pipeline {
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure")
                         def vaultApp = new Vault(vaultAppToken)
-                        vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
+                        vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
                         intention.endAction("configure")
                         intention.startAction("install")
