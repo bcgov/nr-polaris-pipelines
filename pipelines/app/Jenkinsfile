@@ -130,6 +130,8 @@ pipeline {
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
+                            serviceName: env.COMPONENT,
+                            serviceProject: env.PROJECT,
                             environment: 'development',
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
@@ -268,6 +270,8 @@ pipeline {
                             userName: "${env.TEST_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
+                            serviceName: env.COMPONENT,
+                            serviceProject: env.PROJECT,
                             environment: 'test',
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
@@ -417,6 +421,8 @@ pipeline {
                             userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
+                            serviceName: env.COMPONENT,
+                            serviceProject: env.PROJECT,
                             environment: 'production',
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
