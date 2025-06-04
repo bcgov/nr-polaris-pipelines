@@ -135,7 +135,7 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo 'Deploy to ${env.ENV_SHORT} environment'
+                        echo "Deploy to ${env.ENV_SHORT} environment"
                         env.ENV_LONG = JenkinsUtil.convertShortEnvToLong("${params.envShort}")
                         intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
                         if (params.envShort == 'dev') {
