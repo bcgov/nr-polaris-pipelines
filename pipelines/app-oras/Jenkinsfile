@@ -162,9 +162,15 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
-                        env.PODMAN_BUILD_URL = env.BUILD_URL                        
+                        env.PODMAN_BUILD_URL = env.BUILD_URL
+                        def appRoleId = ""
+                        try {
+                            appRoleId = credentials("knox-${params.project}-${params.component}-${params.envShort}-role-id")
+                        } catch (Exception e) {
+                            echo "ROLE ID not found - continue without it"
+                        }                       
                         intention.startAction("configure")
-                        def vaultAppToken = intention.provisionToken("configure")
+                        def vaultAppToken = intention.provisionToken("configure", appRoleId)
                         def vaultApp = new Vault(vaultAppToken)
                         vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
