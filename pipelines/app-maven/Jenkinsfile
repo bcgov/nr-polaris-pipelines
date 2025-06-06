@@ -123,7 +123,7 @@ pipeline {
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
                 AUTHFILE = "auth.json"
-                CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
+                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
@@ -144,7 +144,7 @@ pipeline {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
                         }
                         intention.setEventDetails(
-                            userName: env.CAUSE_USER_ID,
+                            userName: env.DEPLOYMENT_APPROVER,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
                             environment: env.ENV_LONG,
