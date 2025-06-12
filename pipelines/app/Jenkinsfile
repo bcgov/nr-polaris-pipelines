@@ -47,13 +47,13 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh 'git config --global advice.detachedHead false ; git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
                             }
                         }
                     } else {
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh 'git config --global advice.detachedHead false ; git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                             sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
                         }
