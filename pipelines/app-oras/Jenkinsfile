@@ -118,7 +118,7 @@ pipeline {
                 ENV_SHORT = "${params.envShort}"
                 EVENT_PROVIDER = "${params.eventProvider}"
                 HTTP_PROXY = "${params.envShort == 'prod' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.0.2"}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.2.0"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
@@ -168,7 +168,7 @@ pipeline {
                             appRoleId = credentials("knox-${params.project}-${params.component}-${params.envShort}-role-id")
                         } catch (Exception e) {
                             echo "ROLE ID not found - continue without it"
-                        }                       
+                        }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", appRoleId)
                         def vaultApp = new Vault(vaultAppToken)
@@ -216,7 +216,7 @@ pipeline {
                     }
                 }
             }
-        }   
+        }
     }
     post {
         unstable {
