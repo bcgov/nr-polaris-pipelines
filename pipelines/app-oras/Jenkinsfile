@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     // Set the build display name
-                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envShort}"
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
                 }
             }
         }
@@ -115,9 +115,9 @@ pipeline {
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
-                ENV_SHORT = "${params.envShort}"
+                ENV_LONG = "${params.envLong}"
                 EVENT_PROVIDER = "${params.eventProvider}"
-                HTTP_PROXY = "${params.envShort == 'prod' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
+                HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.3.0"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
@@ -135,14 +135,14 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "Deploy to ${env.ENV_SHORT} environment"
-                        env.ENV_LONG = JenkinsUtil.convertShortEnvToLong("${params.envShort}")
+                        echo "Deploy to ${env.ENV_LONG} environment"
+                        env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
                         intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
-                        if (params.envShort == 'dev') {
+                        if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
-                        } else if (params.envShort == 'test') {
+                        } else if (env.ENV_SHORT == 'test') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
-                        } else if (params.envShort == 'prod') {
+                        } else if (env.ENV_SHORT == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
                         }
                         intention.setEventDetails(
@@ -165,7 +165,7 @@ pipeline {
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         def appRoleId = ""
                         try {
-                            appRoleId = credentials("knox-${params.project}-${params.component}-${params.envShort}-role-id")
+                            appRoleId = credentials("knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id")
                         } catch (Exception e) {
                             echo "ROLE ID not found - continue without it"
                         }
