@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     // Set the build display name
-                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envShort}"
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
                 }
             }
         }
@@ -112,10 +112,9 @@ pipeline {
                 COMPONENT = "${params.component}"
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitBranch}"
-                ENV_SHORT = "${params.envShort}"
-                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-${params.envShort}-role-id")
+                ENV_LONG = "${params.envLong}"
                 EVENT_PROVIDER = "${params.eventProvider}"
-                HTTP_PROXY = "${params.envShort == 'prod' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
+                HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.3.0"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
@@ -133,14 +132,14 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "Deploy to ${env.ENV_SHORT} environment"
-                        env.ENV_LONG = JenkinsUtil.convertShortEnvToLong("${params.envShort}")
+                        echo "Deploy to ${env.ENV_LONG} environment"
+                        env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
                         intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
-                        if (params.envShort == 'dev') {
+                        if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
-                        } else if (params.envShort == 'test') {
+                        } else if (env.ENV_SHORT == 'test') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
-                        } else if (params.envShort == 'prod') {
+                        } else if (env.ENV_SHORT == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
                         }
                         intention.setEventDetails(
@@ -161,6 +160,12 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
+                        def appRoleId = ""
+                        try {
+                            appRoleId = credentials("knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id")
+                        } catch (Exception e) {
+                            echo "ROLE ID not found - continue without it"
+                        }
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
@@ -189,7 +194,7 @@ pipeline {
                             error('Quitting')
                         }
                         intention.startAction("configure")
-                        def vaultAppToken = intention.provisionToken("configure", APP_ROLE_ID)
+                        def vaultAppToken = intention.provisionToken("configure", appRoleId)
                         def vaultApp = new Vault(vaultAppToken)
                         vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
