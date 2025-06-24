@@ -162,7 +162,10 @@ pipeline {
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         def appRoleId = ""
                         try {
-                            appRoleId = credentials("knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id")
+                            //appRoleId = credentials("knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id")
+                            withCredentials([string(credentialsId: "knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
+                                appRoleId = env.APP_ROLE_ID
+                            }
                         } catch (Exception e) {
                             echo "ROLE ID not found - continue without it"
                         }
