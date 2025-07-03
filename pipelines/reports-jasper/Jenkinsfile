@@ -2,6 +2,7 @@
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
+import ca.bc.gov.nrids.polaris.JenkinsUtil
 
 def intention
 def podman
@@ -13,7 +14,7 @@ pipeline {
             steps {
                 script {
                     // Set the build display name
-                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.gitBranch} - ${params.envLong}"
                 }
             }
         }
