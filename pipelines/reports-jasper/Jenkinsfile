@@ -121,15 +121,15 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=${env.ENV_SHORT}" --tags create_package')
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags create_package")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=${env.ENV_SHORT}" --tags deploy_package')
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags deploy_package")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=${env.ENV_SHORT}" --tags delete_staging_dir')
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags delete_staging_dir")
                         podman.logout(authfile: "${env.AUTHFILE}")
                         vaultApp.revokeToken()
                         vault.revokeToken()
