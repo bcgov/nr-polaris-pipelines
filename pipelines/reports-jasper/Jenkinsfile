@@ -69,6 +69,7 @@ pipeline {
                 GIT_BRANCH = "${params.gitBranch}"
                 ENV_LONG = "${params.envLong}"
                 EVENT_PROVIDER = "${params.eventProvider}"
+                GITHUB_RUNID= "${params.githubRunId}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 NO_PROXY = "knox.io.nrs.gov.bc.ca,dlvrapps.nrs.bcgov,testapps.nrs.bcgov,apps.nrs.bcgov"
                 AUTHFILE = "auth.json"
@@ -83,12 +84,14 @@ pipeline {
                     try {
                         echo "Do ${env.ENV_LONG} deployment"
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                        def event_reason = "Github action: ${env.GITHUB_RUNID}"
                         intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
                             provider: env.EVENT_PROVIDER,
-                            environment: env.ENV_LONG
+                            environment: env.ENV_LONG,
+                            reason: event_reason
                         )
                         def brokerJwt = "${params.brokerJwt}"
                         intention.open(brokerJwt)
