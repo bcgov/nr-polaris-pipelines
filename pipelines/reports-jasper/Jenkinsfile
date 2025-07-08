@@ -70,7 +70,7 @@ pipeline {
                 ENV_LONG = "${params.envLong}"
                 EVENT_PROVIDER = "${params.eventProvider}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
-                NO_PROXY = "knox.io.nrs.gov.bc.ca,dlvrapps.nrs.bcgov"
+                NO_PROXY = "knox.io.nrs.gov.bc.ca,dlvrapps.nrs.bcgov,testapps.nrs.bcgov,apps.nrs.bcgov"
                 AUTHFILE = "auth.json"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",main"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
@@ -152,7 +152,7 @@ pipeline {
                     }
                 }
             }
-        }  
+        }
     }
     post {
         unstable {
