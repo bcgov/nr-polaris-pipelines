@@ -117,6 +117,7 @@ pipeline {
                 GIT_BRANCH = "${params.gitBranch}"
                 ENV_LONG = "${params.envLong}"
                 EVENT_PROVIDER = "${params.eventProvider}"
+                GITHUB_RUNID= "${params.githubRunId}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.3.0"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
@@ -137,6 +138,7 @@ pipeline {
                     try {
                         echo "Deploy to ${env.ENV_LONG} environment"
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                        def event_reason = "Github action: ${env.GITHUB_RUNID}"
                         intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                         if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
@@ -151,7 +153,8 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: env.ENV_LONG,
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
-                            packageInstallationSourceIntention: env.INTENTION_ID
+                            packageInstallationSourceIntention: env.INTENTION_ID,
+                            reason: event_reason
                         )
                         def brokerJwt = "${params.brokerJwt}"
                         intention.open(brokerJwt)
