@@ -166,13 +166,14 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
-                        def appRoleId = ""
+                        def appRoleId = null
                         try {
                             withCredentials([string(credentialsId: "knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
                                 appRoleId = env.APP_ROLE_ID
                             }
                         } catch (Exception e) {
-                            echo "ROLE ID not found - continue without it"
+                            echo "Provisioning without AppRole RoleID (Jenkins credential: knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id)"
+                            echo "Broker Account must be configured with 'Require RoleId: No'"
                         }
                         intention.startAction("configure")
                         def vaultAppToken = intention.provisionToken("configure", appRoleId)
