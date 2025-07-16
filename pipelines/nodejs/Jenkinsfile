@@ -144,13 +144,22 @@ pipeline {
                         vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
                         env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
                         env.PODMAN_BUILD_URL = env.BUILD_URL
+                        def appRoleId = null
+                        try {
+                            withCredentials([string(credentialsId: "knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
+                                appRoleId = env.APP_ROLE_ID
+                            }
+                        } catch (Exception e) {
+                            echo "Provisioning without AppRole RoleID (Jenkins credential: knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id)"
+                            echo "Broker Account must be configured with 'Require RoleId: No'"
+                        }
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
                                 sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
                             }
                         }
                         intention.startAction("configure")
-                        def vaultAppToken = intention.provisionToken("configure")
+                        def vaultAppToken = intention.provisionToken("configure", appRoleId)
                         def vaultApp = new Vault(vaultAppToken)
                         vaultApp.readToObject("apps/data/dev/${env.PROJECT}/${env.COMPONENT}/development", env, keyTransform: { key -> 'PODMAN_' + key })
                         vaultApp.revokeToken()
