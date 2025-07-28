@@ -33,6 +33,7 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
+                PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -41,10 +42,22 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh '''
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                                git checkout ${GIT_BRANCH}
+                            '''
                         }
                     } else {
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh '''
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                            git checkout ${GIT_BRANCH}
+                        '''
                     }
                 }
             }
@@ -68,6 +81,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
                 APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-dev-role-id")
+                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -103,15 +117,15 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags create_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags deploy_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags delete_staging_dir')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=dev" --tags delete_staging_dir')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         vaultApp.revokeToken()
                         vault.revokeToken()
@@ -167,6 +181,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
                 APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-test-role-id")
+                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -202,15 +217,15 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags create_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=test" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags deploy_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=test" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=test" --tags delete_staging_dir')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=test" --tags delete_staging_dir')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         vaultApp.revokeToken()
                         vault.revokeToken()
@@ -277,6 +292,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
                 APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")
+                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -312,15 +328,15 @@ pipeline {
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags create_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags create_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags deploy_package')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags deploy_package')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: 'ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags delete_staging_dir')
+                            command: 'ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars "jasper_env=prod" --tags delete_staging_dir')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         vaultApp.revokeToken()
                         vault.revokeToken()
