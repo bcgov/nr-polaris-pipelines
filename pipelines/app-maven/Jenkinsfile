@@ -242,7 +242,7 @@ pipeline {
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/${PODMAN_PLAYBOOKS_PATH}/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
+                                ${PODMAN_PLAYBOOKS_PATH}/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
