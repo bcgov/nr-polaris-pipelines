@@ -45,6 +45,8 @@ pipeline {
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : ""}"
+                SERVICE_PATH = "${params.microServicePath != null && params.microServicePath != "" ? params.microServicePath : ""}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -57,16 +59,17 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
+                            def sparseCheckoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
                             sh '''
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins ${sparseCheckoutPath}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
                                 ls -l .jenkins
-                                ls -l ${PLAYBOOKS_PATH}
+                                ls -l ${sparseCheckoutPath}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
@@ -147,6 +150,7 @@ pipeline {
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
                 PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : ""}"
             }
             steps {
                 script {
@@ -236,13 +240,13 @@ pipeline {
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app:/ansible/app \
+                                -v \$(pwd)/app/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                ${PODMAN_PLAYBOOKS_PATH}/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
+                                app/${PODMAN_PLAYBOOKS_PATH}/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
