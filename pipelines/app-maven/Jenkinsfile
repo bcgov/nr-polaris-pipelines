@@ -61,6 +61,7 @@ pipeline {
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
+                                git sparse-checkout init --cone
                                 git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
