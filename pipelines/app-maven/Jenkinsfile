@@ -55,21 +55,24 @@ pipeline {
                     echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
+                    def checkoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
+                    echo "SOURCE_ROOT: ${env.SOURCE_ROOT}"
+                    echo "PLAYBOOKS_PATH: ${env.PLAYBOOKS_PATH}"
+                    echo "checkoutPath: ${checkoutPath}"
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
-                        env.GITHUB_TOKEN = "${params.githubToken}"                        
-                        def checkoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh '''
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins ${checkoutPath}
+                                git sparse-checkout set .jenkins app/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
                                 ls -l .jenkins
-                                ls -l ${checkoutPath}
+                                ls -l app/${PLAYBOOKS_PATH}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
