@@ -61,7 +61,8 @@ pipeline {
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
-                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}                                
+                                ls -l app/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
