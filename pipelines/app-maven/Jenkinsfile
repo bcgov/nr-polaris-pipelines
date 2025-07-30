@@ -75,6 +75,7 @@ pipeline {
                             cd app
                             git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
+                            ls -l app/${PLAYBOOKS_PATH}
                         '''
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                             sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
