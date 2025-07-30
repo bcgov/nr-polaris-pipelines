@@ -57,19 +57,19 @@ pipeline {
                     sh 'rm -rf downloads ; mkdir downloads'
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
-                        env.GITHUB_TOKEN = "${params.githubToken}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"                        
+                        def checkoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            def sparseCheckoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
                             sh '''
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins ${sparseCheckoutPath}
+                                git sparse-checkout set .jenkins ${checkoutPath}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
                                 ls -l .jenkins
-                                ls -l ${sparseCheckoutPath}
+                                ls -l ${checkoutPath}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
