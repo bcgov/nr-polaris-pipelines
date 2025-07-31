@@ -45,7 +45,7 @@ pipeline {
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
-                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : ""}"
+                SOURCE_ROOT = "${params.sourceRoot && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : ""}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -54,7 +54,7 @@ pipeline {
                     echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
-                    def checkoutPath = (env.SOURCE_ROOT != "") ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
+                    def checkoutPath = (env.SOURCE_ROOT != "" && env.SOURCE_ROOT != "null" ) ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
                     echo "checkoutPath: ${checkoutPath}"
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
