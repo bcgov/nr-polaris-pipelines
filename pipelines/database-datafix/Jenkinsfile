@@ -88,11 +88,11 @@ pipeline {
                     // generate github app jwt
                     env.GENERATED_JWT = sh(
                         returnStdout: true,
-                        script: 'set +x; scripts/generate_jwt.sh'
+                        script: 'set +x ; scripts/generate_jwt.sh'
                     )
                     env.GH_TOKEN = sh(
                         returnStdout: true,
-                        script: 'set +x; scripts/get_installation_token.sh'
+                        script: 'set +x ; scripts/get_installation_token.sh'
                     )
                     intention.endAction("login")
                     intention.close(true)
@@ -105,7 +105,7 @@ pipeline {
                 script {
                     def rc = sh(
                         returnStatus: true,
-                        script: "set +x; GH_TOKEN=${GH_TOKEN} gh api repos/${OWNER}/${REPO}/releases/tags/${TAG_VERSION}"
+                        script: "set +x ; GH_TOKEN=${GH_TOKEN} gh api repos/${OWNER}/${REPO}/releases/tags/${TAG_VERSION}"
                     )
                     if (OWNER != null && OWNER != "" && REPO != null && REPO != "" && rc != 0) {
                         currentBuild.result = 'ABORTED'

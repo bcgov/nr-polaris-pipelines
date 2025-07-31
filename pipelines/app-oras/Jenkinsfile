@@ -45,6 +45,8 @@ pipeline {
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
+                PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -56,12 +58,24 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh '''
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                                git checkout ${GIT_BRANCH}
+                            '''
                             sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin '
                             //sh 'ls -l downloads/app'
                         }
                     } else {
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh '''
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                            git checkout ${GIT_BRANCH}
+                        '''
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     }
                     def download_sha256 = sh(
@@ -132,6 +146,8 @@ pipeline {
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
+                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
+                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
@@ -186,6 +202,16 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
+                        def appMountPath
+                        if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
+                            appMountPath = "\$(pwd)/app"
+                        } else if (env.PODMAN_SOURCE_ROOT != "." && env.PODMAN_SOURCE_ROOT != "") {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
+                        } else {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${serviceDir}"
+                        }
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
@@ -194,7 +220,7 @@ pipeline {
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app:/ansible/app \
+                                -v ${appMountPath}:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \

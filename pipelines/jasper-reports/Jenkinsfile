@@ -167,7 +167,7 @@ pipeline {
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
                 APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-test-role-id")
-            }
+             }
             steps {
                 script {
                     try {
@@ -276,7 +276,7 @@ pipeline {
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
-                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")
+                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")                
             }
             steps {
                 script {
