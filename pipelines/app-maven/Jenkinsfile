@@ -54,8 +54,6 @@ pipeline {
                     echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
-                    echo "sourcePath: ${SOURCE_ROOT}"
-                    echo "playbookPath: ${PLAYBOOKS_PATH}"
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
@@ -67,9 +65,6 @@ pipeline {
                                 git sparse-checkout init --cone
                                 git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
-                                ls -l 
-                                ls -l .jenkins
-                                ls -l ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             """
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
@@ -243,7 +238,6 @@ pipeline {
                             def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
                             appMountPath = "\$(pwd)/app/${serviceDir}"
                         }
-                        echo "appMountPath: ${appMountPath}"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
