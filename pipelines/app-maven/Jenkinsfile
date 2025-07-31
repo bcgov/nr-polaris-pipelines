@@ -235,7 +235,16 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
-                        def appMountPath = (env.PODMAN_SOURCE_ROOT != "") ? "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}" : "\$(pwd)/app"
+                        def appMountPath
+                        if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
+                            appMountPath = "\$(pwd)/app"
+                        } else if (env.PODMAN_SOURCE_ROOT != "") {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
+                        } else {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${serviceDir}"
+                        }
                         echo "appMountPath: ${appMountPath}"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
@@ -244,14 +253,14 @@ pipeline {
                             command: '/bin/sh -c "git config --global advice.detachedHead false && ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}"')
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/${PODMAN_PLAYBOOKS_PATH}/collections \
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v ${appMountPath}:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/${PODMAN_PLAYBOOKS_PATH}/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
+                                app/playbooks/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
                         podman.logout(authfile: "${env.AUTHFILE}")
                         intention.endAction("install")
                         vault.revokeToken()
