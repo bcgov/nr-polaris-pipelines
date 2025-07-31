@@ -42,6 +42,7 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -55,7 +56,7 @@ pipeline {
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
-                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                             '''
                         }
@@ -64,7 +65,7 @@ pipeline {
                             git config --global advice.detachedHead false
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
-                            git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                            git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
                         '''
                     }
@@ -91,6 +92,7 @@ pipeline {
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
+                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -130,6 +132,16 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
+                        def appMountPath
+                        if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
+                            appMountPath = "\$(pwd)/app"
+                        } else if (env.PODMAN_SOURCE_ROOT != "." && env.PODMAN_SOURCE_ROOT != "") {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
+                        } else {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${serviceDir}"
+                        }
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.sa_username} -p ${env.sa_password}")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
@@ -137,16 +149,16 @@ pipeline {
                             command: 'ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}')
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: "ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags create_package")
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v ${appMountPath}:/ansible/app -e PODMAN_*",
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags create_package")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: "ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags deploy_package")
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v ${appMountPath}:/ansible/app -e PODMAN_*",
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags deploy_package")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v \$(pwd)/app:/ansible/app -e PODMAN_*",
-                            command: "ansible-playbook app/${PODMAN_PLAYBOOKS_PATH}/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags delete_staging_dir")
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections -v ${appMountPath}:/ansible/app -e PODMAN_*",
+                            command: "ansible-playbook app/playbooks/jasper-reports.yaml --extra-vars \"jasper_env=${env.ENV_SHORT}\" --tags delete_staging_dir")
                         podman.logout(authfile: "${env.AUTHFILE}")
                         vaultApp.revokeToken()
                         vault.revokeToken()
