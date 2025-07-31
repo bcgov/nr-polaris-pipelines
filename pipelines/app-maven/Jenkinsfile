@@ -45,7 +45,7 @@ pipeline {
                 DOWNLOAD_URL = "${params.downloadUrl}"
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
-                SOURCE_ROOT = "${params.sourceRoot && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : ""}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -54,8 +54,8 @@ pipeline {
                     echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
-                    def checkoutPath = (env.SOURCE_ROOT != "" && env.SOURCE_ROOT != "null" ) ? "${env.SOURCE_ROOT}/${env.PLAYBOOKS_PATH}" : "${env.PLAYBOOKS_PATH}"
-                    echo "checkoutPath: ${checkoutPath}"
+                    echo "sourcePath: ${SOURCE_ROOT}"
+                    echo "playbookPath: ${PLAYBOOKS_PATH}"
                     if (env.GITHUB_PRIVATE_REPO) {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
@@ -65,11 +65,11 @@ pipeline {
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins ${checkoutPath}
+                                git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
                                 ls -l .jenkins
-                                ls -l ${checkoutPath}
+                                ls -l ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             """
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
