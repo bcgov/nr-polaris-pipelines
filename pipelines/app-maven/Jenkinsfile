@@ -81,7 +81,7 @@ pipeline {
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
                             git sparse-checkout init --cone
-                            git sparse-checkout set .jenkins ${checkoutPath}
+                            git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
                         """
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
@@ -236,7 +236,7 @@ pipeline {
                         def appMountPath
                         if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
                             appMountPath = "\$(pwd)/app"
-                        } else if (env.PODMAN_SOURCE_ROOT != "") {
+                        } else if (env.PODMAN_SOURCE_ROOT != "." && env.PODMAN_SOURCE_ROOT != "") {
                             def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
                             appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
                         } else {
