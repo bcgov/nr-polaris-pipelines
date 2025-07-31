@@ -58,27 +58,27 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh """
+                            sh '''
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
                                 git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
-                            """
+                            '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
                             }
                         }
                     } else {
-                        sh """
+                        sh '''
                             git config --global advice.detachedHead false
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
                             git sparse-checkout init --cone
                             git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
-                        """
+                        '''
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                             sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
                         }
