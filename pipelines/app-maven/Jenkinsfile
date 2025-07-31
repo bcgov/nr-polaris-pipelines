@@ -46,7 +46,6 @@ pipeline {
                 DOWNLOAD_TYPE =" ${params.downloadType}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
                 SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : ""}"
-                SERVICE_PATH = "${params.microServicePath != null && params.microServicePath != "" ? params.microServicePath : ""}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
@@ -68,11 +67,11 @@ pipeline {
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins app/${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins ${checkoutPath}
                                 git checkout ${GIT_BRANCH}
                                 ls -l 
                                 ls -l .jenkins
-                                ls -l app/${PLAYBOOKS_PATH}
+                                ls -l ${checkoutPath}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
@@ -83,7 +82,8 @@ pipeline {
                             git config --global advice.detachedHead false
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
-                            git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                            git sparse-checkout init --cone
+                            git sparse-checkout set .jenkins ${checkoutPath}
                             git checkout ${GIT_BRANCH}
                         '''
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
@@ -235,6 +235,8 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
+                        def appMountPath = (env.PODMAN_SOURCE_ROOT != "") ? "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}" : "\$(pwd)/app"
+                        echo "appMountPath: ${appMountPath}"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
@@ -242,8 +244,8 @@ pipeline {
                             command: '/bin/sh -c "git config --global advice.detachedHead false && ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}"')
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app/app:/ansible/app \
+                            options: "-v \$(pwd)/collections:/ansible/app/${PODMAN_PLAYBOOKS_PATH}/collections \
+                                -v ${appMountPath}:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads:/ansible/downloads \
