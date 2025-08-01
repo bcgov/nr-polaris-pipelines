@@ -68,7 +68,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get github app creds
-                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-github.json'))
+                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-github-app-transient.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -128,7 +128,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get registry and db creds
-                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-db.json'))
+                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-database-transient.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
