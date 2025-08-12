@@ -1,4 +1,4 @@
-@Library('polaris@feat/addTrigger')
+@Library('polaris')
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
