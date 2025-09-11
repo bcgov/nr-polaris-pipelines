@@ -23,14 +23,15 @@ pipeline {
         label Podman.AGENT_LABEL_APP
     }
 
-    options {
-        // Sets the build display name (requires Build Name Setter Plugin)
-        buildName("#${BUILD_NUMBER} - ${params.envLong ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}")
-        // Sets the build description (same plugin)
-        buildDescription("Triggered by: ${BUILD_USER_ID ?: 'system'}")
-    }
-
     stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    // Set the build display name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.envLong ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+                }
+            }
+        }
         stage('Banner') {
             steps {
                 echo """
