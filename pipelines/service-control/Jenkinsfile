@@ -1,4 +1,4 @@
-@Library('polaris')
+@Library('polaris@feat/stages')
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.JenkinsPipeline
 import ca.bc.gov.nrids.polaris.JenkinsUtil
@@ -10,11 +10,12 @@ def podman
 
 // Params
 // params.gitRepo
+// params.gitBasicAuth
 // params.gitTag
-// params.gitHubToken
 // params.brokerJwt
-// params.serviceName
-// params.envLong
+// params.user
+// params.service
+// params.environment
 // params.controlAction
 
 pipeline {
