@@ -96,9 +96,7 @@ pipeline {
         // }
         stage('Retrieve inventory') {
             steps {
-                script {
-                    JenkinsPipeline.retrieveInventory()
-                }
+                JenkinsPipeline.retrieveInventory()
             }
         }
         // stage('Run service control') {
