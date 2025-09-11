@@ -7,6 +7,7 @@ import ca.bc.gov.nrids.polaris.Vault
 
 def intention
 def podman
+def jp = new JenkinsPipeline(this)
 
 // Params
 // params.gitRepo
@@ -17,6 +18,7 @@ def podman
 // params.service
 // params.environment
 // params.controlAction
+
 
 pipeline {
     agent {
@@ -97,9 +99,7 @@ pipeline {
         stage('Retrieve inventory') {
             steps {
                 script {
-                    def jp = new JenkinsPipeline(this)
                     jp.retrieveInventory()
-                    // JenkinsPipeline.retrieveInventory()
                 }
             }
         }
