@@ -19,7 +19,9 @@ def podman
 // params.controlAction
 
 pipeline {
-    agent label Podman.AGENT_LABEL_APP
+    agent {
+        label Podman.AGENT_LABEL_APP
+    }
 
     options {
         // Sets the build display name (requires Build Name Setter Plugin)
