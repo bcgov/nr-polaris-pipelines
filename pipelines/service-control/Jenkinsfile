@@ -7,6 +7,7 @@ import ca.bc.gov.nrids.polaris.Vault
 
 def intention
 def podman
+def jp = new JenkinsPipeline(this)
 
 // Params
 // params.gitRepo
@@ -28,7 +29,7 @@ pipeline {
             steps {
                 script {
                     // Set the build display name
-                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.envLong ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.envirnment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
                 }
             }
         }
@@ -96,7 +97,10 @@ pipeline {
         // }
         stage('Retrieve inventory') {
             steps {
-                JenkinsPipeline.retrieveInventory()
+                script {
+                    jp.retrieveInventory()
+                    // JenkinsPipeline.retrieveInventory()
+                }
             }
         }
         // stage('Run service control') {
