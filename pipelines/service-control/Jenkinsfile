@@ -82,7 +82,7 @@ pipeline {
                         } else if (serviceIds.size() > 1) {
                             error "Multiple services named '${params.service}' found in broker: ${serviceIds.join(', ')}"
                         }
-                        def service = brokerApi.getCollectionById(params.brokerJwt, 'service', 'name', serviceIds[0])
+                        def service = brokerApi.getCollectionById(params.brokerJwt, 'service', serviceIds[0])
                         echo "Found service in broker: ${service}"
                     }
                 }
