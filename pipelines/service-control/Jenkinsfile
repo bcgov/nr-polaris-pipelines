@@ -63,7 +63,15 @@ pipeline {
         stage('Checkout app - new') {
             steps {
                 script {
-                    jp.retrieveRepoRoot(params);
+                    def catalogs = jp.retrieveRepoCatalogs(params.gitRepo, params.gitBasicAuth, params.gitTag);
+                    echo catalogs
+                }
+            }
+        }
+        stage('Retrieve inventory') {
+            steps {
+                script {
+                    jp.retrieveInventory()
                 }
             }
         }
@@ -169,13 +177,6 @@ pipeline {
                             git checkout ${GIT_BRANCH}
                         '''
                     }
-                }
-            }
-        }
-        stage('Retrieve inventory') {
-            steps {
-                script {
-                    jp.retrieveInventory()
                 }
             }
         }
