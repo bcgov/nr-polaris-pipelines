@@ -64,7 +64,7 @@ pipeline {
             steps {
                 script {
                     def catalogs = jp.retrieveRepoCatalogs(params.gitRepo, params.gitBasicAuth, params.gitTag);
-                    echo catalogs
+                    echo catalogs.join('\n')
                     def serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
                     if (serviceCatInfo == null) {
                         error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
