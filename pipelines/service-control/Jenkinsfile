@@ -63,14 +63,16 @@ pipeline {
         stage('Checkout app - new') {
             steps {
                 script {
-                    def catalogs = jp.retrieveRepoCatalogs(params.gitRepo, params.gitBasicAuth, params.gitTag);
-                    echo catalogs.join('\n')
-                    def serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
-                    if (serviceCatInfo == null) {
-                        error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
+                    dir('app') {
+                        def catalogs = jp.retrieveRepoCatalogs(params.gitRepo, params.gitBasicAuth, params.gitTag);
+                        echo catalogs.join('\n')
+                        def serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
+                        if (serviceCatInfo == null) {
+                            error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
+                        }
+                        echo "Found service '${params.service}' in catalog: ${serviceCatInfo}"
+                        jp.retrieveServicePlaybooks(serviceCatInfo)
                     }
-                    echo "Found service '${params.service}' in catalog: ${serviceCatInfo}"
-                    jp.retrieveServicePlaybooks(serviceCatInfo)
                 }
             }
         }
