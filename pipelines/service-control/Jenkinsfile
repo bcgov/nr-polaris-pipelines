@@ -69,7 +69,7 @@ pipeline {
                     if (serviceCatInfo == null) {
                         error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                     }
-                    echo "Found service '${params.service}' in catalog: ${serviceCatInfo.catalog}"
+                    echo "Found service '${params.service}' in catalog: ${serviceCatInfo}"
                     jp.retrieveServicePlaybooks(serviceCatInfo)
                 }
             }
