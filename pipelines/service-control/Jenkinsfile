@@ -31,6 +31,7 @@ pipeline {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+                    cleanWs()
                 }
             }
         }
@@ -59,43 +60,118 @@ pipeline {
                 """
             }
         }
-        // stage('Checkout app') {
-        //     environment {
-        //         GIT_REPO = "${params.gitRepo}"
-        //         GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
-        //         GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
-        //         SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
-        //         PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
-        //     }
-        //     steps {
-        //         script {
-        //             echo 'NR POLARIS - Checkout app'
-        //             echo "GIT_BRANCH: ${GIT_BRANCH}"
-        //             sh 'rm -rf app'
-        //             if (env.GITHUB_PRIVATE_REPO) {
-        //                 env.GITHUB_USER = "${params.githubUser}"
-        //                 env.GITHUB_TOKEN = "${params.githubToken}"
-        //                 wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-        //                     sh '''
-        //                         git config --global advice.detachedHead false
-        //                         git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
-        //                         cd app
-        //                         git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
-        //                         git checkout ${GIT_BRANCH}
-        //                     '''
-        //                 }
-        //             } else {
-        //                 sh '''
-        //                     git config --global advice.detachedHead false
-        //                     git clone -q --no-checkout https://${GIT_REPO} app
-        //                     cd app
-        //                     git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
-        //                     git checkout ${GIT_BRANCH}
-        //                 '''
-        //             }
-        //         }
-        //     }
-        // }
+        stage('Checkout app - new') {
+            steps {
+                script {
+                    jp.retrieveRepoRoot(params);
+                }
+            }
+        }
+        stage('Checkout app') {
+            environment {
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
+                GITHUB_PRIVATE_REPO = "${params.githubToken ? 'true' : ''}"
+                SOURCE_ROOT = "${params.sourceRoot && params.sourceRoot != 'null' ? params.sourceRoot : '.'}"
+                PLAYBOOKS_PATH = "${params.playbooksPath ?: 'playbooks'}"
+            }
+            steps {
+                script {
+                    echo 'NR POLARIS - Checkout app'
+                    echo "GIT_BRANCH: ${GIT_BRANCH}"
+                    sh 'rm -rf app'
+
+                    // --- Git checkout ---
+                    if (env.GITHUB_PRIVATE_REPO) {
+                        env.GITHUB_USER  = "${params.githubUser}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GITHUB_TOKEN', password: env.GITHUB_TOKEN]]]) {
+                            sh """
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout set .jenkins catalog-info.yaml
+                                git checkout ${GIT_BRANCH}
+                            """
+                        }
+                    } else {
+                        sh """
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                            git checkout ${GIT_BRANCH}
+                        """
+                    }
+
+                    // --- Backstage validation ---
+                    dir('app') {
+                        def catalog = readYaml(file: 'catalog-info.yaml')
+
+                        if (catalog.kind == 'Location') {
+                            echo "catalog-info.yaml is a Location file. Following targets..."
+
+                            def matched = false
+                            catalog.spec.targets.each { target ->
+                                echo "Checking target: ${target}"
+                                def child = readYaml(file: target)
+                                if (child?.metadata?.name == params.appName) {
+                                    echo "Found matching Backstage entity: ${child.metadata.name}"
+                                    matched = true
+                                }
+                            }
+
+                            if (!matched) {
+                                error "No Backstage entity found with metadata.name = ${params.appName}"
+                            }
+                        } else {
+                            echo "catalog-info.yaml is not a Location file. Checking directly..."
+                            if (catalog?.metadata?.name != params.appName) {
+                                error "catalog-info.yaml metadata.name '${catalog.metadata?.name}' does not match '${params.appName}'"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Checkout app') {
+            environment {
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
+                GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
+                PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+            }
+            steps {
+                script {
+                    echo 'NR POLARIS - Checkout app'
+                    echo "GIT_BRANCH: ${GIT_BRANCH}"
+                    sh 'rm -rf app'
+                    if (env.GITHUB_PRIVATE_REPO) {
+                        env.GITHUB_USER = "${params.githubUser}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
+                            sh '''
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                                git checkout ${GIT_BRANCH}
+                            '''
+                        }
+                    } else {
+                        sh '''
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                            git checkout ${GIT_BRANCH}
+                        '''
+                    }
+                }
+            }
+        }
         stage('Retrieve inventory') {
             steps {
                 script {
