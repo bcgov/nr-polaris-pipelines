@@ -76,7 +76,14 @@ pipeline {
                         jp.retrieveServicePlaybooks(serviceCatInfo)
                         def brokerApi = new BrokerApi()
                         def serviceIds = brokerApi.doUniqueKeyCheck(params.brokerJwt, 'service', 'name', params.service)
-                        echo serviceIds
+                        echo serviceIds.join('\n')
+                        if (serviceIds.size() == 0) {
+                            error "Service '${params.service}' not found in broker"
+                        } else if (serviceIds.size() > 1) {
+                            error "Multiple services named '${params.service}' found in broker: ${serviceIds.join(', ')}"
+                        }
+                        def service = brokerApi.getCollectionById(params.brokerJwt, 'service', 'name', serviceIds[0])
+                        echo "Found service in broker: ${service}"
                     }
                 }
             }
