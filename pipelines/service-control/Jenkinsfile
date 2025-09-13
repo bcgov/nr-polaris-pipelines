@@ -122,7 +122,6 @@ pipeline {
                 AUTHFILE = "auth.json"
                 PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
-                PODMAN_PLAYBOOKS_PATH = "${params.controlAction}"
             }
             steps {
                 script {
