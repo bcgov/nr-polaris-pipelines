@@ -75,7 +75,7 @@ pipeline {
                         echo "Found service '${params.service}' in catalog: ${serviceCatInfo.path}"
                         jp.retrieveServicePlaybooks(serviceCatInfo)
                     }
-                    def brokerApi = new BrokerApi(params.brokerJwt.getPlainText())
+                    def brokerApi = new BrokerApi("${params.brokerJwt}")
                     def serviceIds = brokerApi.doUniqueKeyCheck('service', 'name', params.service)
                     echo serviceIds.join('\n')
                     if (serviceIds.size() == 0) {
@@ -146,7 +146,7 @@ pipeline {
                             triggerUrl: env.TRIGGER_URL,
                             environment: env.ENV_LONG,
                         )
-                        intention.open(params.brokerJwt.getPlainText())
+                        intention.open("${params.brokerJwt}")
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
