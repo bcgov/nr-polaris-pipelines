@@ -10,6 +10,8 @@ def intention
 def podman
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
+def baseDir = 'app'
+def playbookBaseDir
 
 // Params
 // params.gitRepo
@@ -26,14 +28,10 @@ pipeline {
     agent {
         label Podman.AGENT_LABEL_APP
     }
-    options {
-        skipDefaultCheckout(true)
-    }
 
     stages {
         stage('Initialize') {
             steps {
-                cleanWs()
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
@@ -63,19 +61,26 @@ pipeline {
                 of all roles used by their Ansible playbook file.
                 ====================================================
                 """.replaceAll("(?m)^\\s+", "")
-                checkout scm
+                // Ensure clean workspace before starting
+                cleanWs(
+                    deleteDirs: true,
+                    patterns: [
+                        [pattern: "${baseDir}/*", type: 'INCLUDE']
+                    ]
+                )
             }
         }
         stage('Checkout service') {
             steps {
                 script {
-                    dir('app') {
+                    dir(baseDir) {
                         def catalogs = jp.retrieveRepoCatalogs(
                             params.gitRepo,
                             params.gitBasicAuth,
                             params.gitTag);
 
                         serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
+                        playbookBaseDir = "${baseDir}/${serviceCatInfo.dir}"
                         if (serviceCatInfo == null) {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                         }
@@ -97,8 +102,12 @@ pipeline {
         }
         stage('Retrieve inventory') {
             steps {
-                script {
-                    jp.retrieveInventory()
+                dir(playbookBaseDir) {
+                    script {
+                        jp.retrieveInventory()
+                        sh 'ls -al'
+                    }
+                    echo "Retrieve inventory for service '${params.service}' in environment '${params.environment}'"
                 }
             }
         }
@@ -207,42 +216,37 @@ pipeline {
     }
     post {
         unstable {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(false)
                 }
             }
         }
         failure {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(false)
                 }
             }
         }
         aborted {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println  intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println  intention.close(false)
                 }
             }
         }
         always {
-            node(Podman.AGENT_LABEL_APP) {
-                cleanWs(
-                    cleanWhenAborted: true,
-                    cleanWhenFailure: false,
-                    cleanWhenSuccess: true,
-                    cleanWhenUnstable: false,
-                    deleteDirs: true
-                )
-            }
+            cleanWs(
+                cleanWhenAborted: true,
+                cleanWhenFailure: false,
+                cleanWhenSuccess: true,
+                cleanWhenUnstable: false,
+                deleteDirs: true,
+                patterns: [
+                    [pattern: "${baseDir}/*", type: 'INCLUDE']
+                ]
+            )
         }
     }
 }
