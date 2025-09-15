@@ -26,16 +26,17 @@ pipeline {
     agent {
         label Podman.AGENT_LABEL_APP
     }
+    options {
+        skipDefaultCheckout(true)
+    }
 
     stages {
         stage('Initialize') {
             steps {
+                cleanWs()
                 script {
-                    sh 'ls -la'
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
-                    cleanWs()
-                    sh 'ls -la'
                 }
             }
         }
@@ -62,6 +63,7 @@ pipeline {
                 of all roles used by their Ansible playbook file.
                 ====================================================
                 """.replaceAll("(?m)^\\s+", "")
+                checkout scm
             }
         }
         stage('Checkout service') {
