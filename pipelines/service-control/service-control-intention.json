@@ -28,7 +28,6 @@
     {
       "action": "process-start",
       "id": "start",
-      "provision": ["token/self"],
       "service": {
         "name": "nodejs-sample",
         "project": "oscar-example",
@@ -38,7 +37,6 @@
     {
       "action": "process-end",
       "id": "end",
-      "provision": ["token/self"],
       "service": {
         "name": "nodejs-sample",
         "project": "oscar-example",
