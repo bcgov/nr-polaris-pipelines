@@ -93,7 +93,7 @@ pipeline {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                         }
                         echo "Found service '${params.service}' in catalog: ${serviceCatInfo.path}"
-                        appPlaybookBaseDir = jp.retrieveServicePlaybooks(serviceCatInfo)
+                        appPlaybookBaseDir = 'app/' + jp.retrieveServicePlaybooks(serviceCatInfo)
                     }
                     def brokerApi = new BrokerApi("${params.brokerJwt}")
                     def serviceIds = brokerApi.doUniqueKeyCheck('service', 'name', params.service)
