@@ -25,7 +25,6 @@ def podman = new Podman(this, "\$(pwd)/auth.json")
 // params.environment
 // params.controlAction
 
-
 pipeline {
     agent {
         label Podman.AGENT_LABEL_APP
@@ -68,7 +67,7 @@ pipeline {
                 cleanWs(
                     deleteDirs: true,
                     patterns: [
-                        [pattern: "${appBaseDir}/*", type: 'INCLUDE']
+                        [pattern: "${appBaseDir}", type: 'INCLUDE']
                     ]
                 )
                 sh 'ls -al'
