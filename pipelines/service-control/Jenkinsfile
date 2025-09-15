@@ -117,9 +117,7 @@ pipeline {
             steps {
                 script {
                     def projectName = serviceCatInfo.catalog.metadata.name
-                    intention = new BrokerIntention(
-                        readJSON(file: "pipelines/service-control/service-control-intention.json")
-                    )
+                    intention = new BrokerIntention(readJSON(file: "pipelines/service-control/service-control-intention.json"))
                     if (params.controlAction == "start") {
                         intention.filterActionsByIds(['login', 'start'])
                     } else if (params.controlAction == "stop") {
