@@ -31,9 +31,11 @@ pipeline {
         stage('Initialize') {
             steps {
                 script {
+                    sh 'ls -la'
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
                     cleanWs()
+                    sh 'ls -la'
                 }
             }
         }
@@ -66,8 +68,11 @@ pipeline {
             steps {
                 script {
                     dir('app') {
-                        def catalogs = jp.retrieveRepoCatalogs(params.gitRepo, params.gitBasicAuth, params.gitTag);
-                        echo catalogs.join('\n')
+                        def catalogs = jp.retrieveRepoCatalogs(
+                            params.gitRepo,
+                            params.gitBasicAuth,
+                            params.gitTag);
+
                         serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
                         if (serviceCatInfo == null) {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
