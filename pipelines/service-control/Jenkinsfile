@@ -67,7 +67,8 @@ pipeline {
                 cleanWs(
                     deleteDirs: true,
                     patterns: [
-                        [pattern: "${appBaseDir}", type: 'INCLUDE']
+                        [pattern: "${appBaseDir}", type: 'INCLUDE'],
+                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
                     ]
                 )
                 sh 'ls -al'
