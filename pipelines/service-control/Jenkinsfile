@@ -122,7 +122,7 @@ pipeline {
         stage('Open Intention') {
             steps {
                 script {
-                    def projectName = serviceCatInfo.catalog.metadata.name
+                    def projectName = serviceCatInfo.catalog.spec.system
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
                     echo "${params.environment}"
                     intention.setEventDetails(
