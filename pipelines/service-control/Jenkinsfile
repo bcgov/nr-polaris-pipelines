@@ -122,10 +122,10 @@ pipeline {
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
                     echo "${params.environment}"
                     intention.setEventDetails(
-                        userName: "${params.user}",
+                        userName: params.user.toString(),
                         url: env.BUILD_URL,
                         provider: "Jenkins Service Control",
-                        serviceName: "${params.service}",
+                        serviceName: params.service.toString(),
                         serviceProject: projectName,
                         environment: params.environment.toString()
                     )
