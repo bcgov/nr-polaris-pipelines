@@ -11,8 +11,8 @@ import groovy.json.JsonOutput
 def intention
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
-def appBaseDir = '\$(pwd)/app'
-def ansibleBaseDir = '\$(pwd)/ansible'
+def appBaseDir = "\$(pwd)/app"
+def ansibleBaseDir = "\$(pwd)/ansible"
 def playbookBaseDir
 def podman = new Podman(this, "\$(pwd)/auth.json")
 // Params
