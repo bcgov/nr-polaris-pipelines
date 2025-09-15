@@ -127,14 +127,14 @@ pipeline {
                         provider: "Jenkins Service Control",
                         serviceName: "${params.service}",
                         serviceProject: projectName,
-                        environment: "${params.environment}"
+                        environment: params.environment.toString()
                     )
                     // if (params.controlAction == "start") {
                     //     intention.filterActionsByIds(['login', 'start'])
                     // } else if (params.controlAction == "stop") {
                     //     intention.filterActionsByIds(['login', 'stop'])
                     // }
-                    echo intention.intention.actions[0].service.environment
+                    echo "${intention.intention.actions[0].service.environment}"
 
 
 
