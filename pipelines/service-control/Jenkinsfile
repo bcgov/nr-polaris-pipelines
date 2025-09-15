@@ -134,7 +134,7 @@ pipeline {
                     // } else if (params.controlAction == "stop") {
                     //     intention.filterActionsByIds(['login', 'stop'])
                     // }
-                    echo JsonOutput.toJson(intention.intention, 4)
+                    echo intention.intention.actions[0].environment
 
 
 
