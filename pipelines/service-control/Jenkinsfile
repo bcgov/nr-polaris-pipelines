@@ -11,8 +11,8 @@ import groovy.json.JsonOutput
 def intention
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
-def appBaseDir = 'app'
-def ansibleBaseDir = 'ansible'
+def appBaseDir = '\$(pwd)/app'
+def ansibleBaseDir = '\$(pwd)/ansible'
 def playbookBaseDir
 def podman = new Podman(this, "\$(pwd)/auth.json")
 // Params
@@ -36,7 +36,6 @@ pipeline {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
-                    sh 'ls -al'
                 }
             }
         }
@@ -68,9 +67,13 @@ pipeline {
                     deleteDirs: true,
                     patterns: [
                         [pattern: "${appBaseDir}", type: 'INCLUDE'],
-                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
+                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE'],
+                        [pattern: "infra", type: 'INCLUDE'],
+                        [pattern: "infra@tmp", type: 'INCLUDE']
                     ]
                 )
+                echo appBaseDir
+                echo ansibleBaseDir
                 sh 'ls -al'
             }
         }
@@ -84,12 +87,11 @@ pipeline {
                             params.gitTag);
 
                         serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
-                        playbookBaseDir = "${appBaseDir}/${serviceCatInfo.dir}"
                         if (serviceCatInfo == null) {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                         }
                         echo "Found service '${params.service}' in catalog: ${serviceCatInfo.path}"
-                        jp.retrieveServicePlaybooks(serviceCatInfo)
+                        playbookBaseDir = jp.retrieveServicePlaybooks(serviceCatInfo)
                     }
                     def brokerApi = new BrokerApi("${params.brokerJwt}")
                     def serviceIds = brokerApi.doUniqueKeyCheck('service', 'name', params.service)
@@ -135,8 +137,6 @@ pipeline {
                     //     intention.filterActionsByIds(['login', 'stop'])
                     // }
                     echo "${intention.intention.actions[0].service.environment}"
-
-
 
                     intention.open()
                     intention.openResponse.actions.each { key, value ->
@@ -196,40 +196,42 @@ pipeline {
             }
             steps {
                 script {
-                    try {
-                        echo "Modify ${params.environment} environment"
-                        env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
-                        if (env.ENV_SHORT == 'dev') {
-                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
-                        } else if (env.ENV_SHORT == 'test') {
-                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smttest'
-                        } else if (env.ENV_SHORT == 'prod') {
-                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
+                    dir(playbookBaseDir) {
+                        try {
+                            echo "Modify ${params.environment} environment"
+                            env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                            if (env.ENV_SHORT == 'dev') {
+                                env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
+                            } else if (env.ENV_SHORT == 'test') {
+                                env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smttest'
+                            } else if (env.ENV_SHORT == 'prod') {
+                                env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
+                            }
+                            podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                                options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                    -v \$(pwd)/app:/ansible/app \
+                                    -v \$(pwd)/infra/inventory:/ansible/inventory \
+                                    -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                    -e PODMAN_* -e ACTION_TOKEN_*",
+                                command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                    app/playbooks/playbook.yaml -e "proxy_env=${ENV_SHORT}"')
+                            podman.logout()
+                            intention.endAction("login")
+                            println intention.close(true)
+                            intention = null
+                        } catch (IllegalStateException ex) {
+                            echo "IllegalStateException occurred: $ex"
+                            currentBuild.result = 'FAILURE'
+                            error('Quitting')
+                        } catch (IllegalArgumentException ex) {
+                            echo "IllegalArgumentException occurred: $ex"
+                            currentBuild.result = 'FAILURE'
+                            error('Quitting')
+                        } catch (Exception ex) {
+                            echo "Other exception occurred: $ex"
+                            currentBuild.result = 'FAILURE'
+                            error('Quitting')
                         }
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/app:/ansible/app \
-                                -v \$(pwd)/infra/inventory:/ansible/inventory \
-                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                                -e PODMAN_* -e ACTION_TOKEN_*",
-                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml -e "proxy_env=${ENV_SHORT}"')
-                        podman.logout()
-                        intention.endAction("login")
-                        println intention.close(true)
-                        intention = null
-                    } catch (IllegalStateException ex) {
-                        echo "IllegalStateException occurred: $ex"
-                        currentBuild.result = 'FAILURE'
-                        error('Quitting')
-                    } catch (IllegalArgumentException ex) {
-                        echo "IllegalArgumentException occurred: $ex"
-                        currentBuild.result = 'FAILURE'
-                        error('Quitting')
-                    } catch (Exception ex) {
-                        echo "Other exception occurred: $ex"
-                        currentBuild.result = 'FAILURE'
-                        error('Quitting')
                     }
                 }
             }
