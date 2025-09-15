@@ -123,6 +123,7 @@ pipeline {
                     } else if (params.controlAction == "stop") {
                         intention.filterActionsByIds(['login', 'stop'])
                     }
+                    echo "${params.environment}"
                     intention.setEventDetails(
                         userName: "${params.user}",
                         url: env.BUILD_URL,
@@ -133,6 +134,8 @@ pipeline {
                         // triggerUrl: env.TRIGGER_URL,
                         environment: "${params.environment}"
                     )
+                    echo "${intention.intention}"
+
 
                     intention.open()
                     intention.openResponse.actions.each { key, value ->
