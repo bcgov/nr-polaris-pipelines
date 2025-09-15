@@ -117,12 +117,12 @@ pipeline {
             steps {
                 script {
                     def projectName = serviceCatInfo.catalog.metadata.name
-                    intention = new BrokerIntention(readJSON(file: "pipelines/service-control/service-control-intention.json"))
-                    // if (params.controlAction == "start") {
-                    //     intention.filterActionsByIds(['login', 'start'])
-                    // } else if (params.controlAction == "stop") {
-                    //     intention.filterActionsByIds(['login', 'stop'])
-                    // }
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
+                    if (params.controlAction == "start") {
+                        intention.filterActionsByIds(['login', 'start'])
+                    } else if (params.controlAction == "stop") {
+                        intention.filterActionsByIds(['login', 'stop'])
+                    }
                     intention.setEventDetails(
                         userName: "${params.user}",
                         url: env.BUILD_URL,
@@ -134,7 +134,7 @@ pipeline {
                         environment: "${params.environment}"
                     )
 
-                    intention.open("${params.brokerJwt}")
+                    intention.open()
                     intention.openResponse.actions.each { key, value ->
                         env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                     }
