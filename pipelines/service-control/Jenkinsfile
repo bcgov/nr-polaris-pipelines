@@ -40,9 +40,9 @@ pipeline {
         stage('Banner') {
             steps {
                 echo """
-                =====================================================
-                            NR Polaris Pipeline
-                =====================================================
+                ====================================================
+                -                NR Polaris Pipeline               -
+                ====================================================
 
                 Job:    ${env.JOB_NAME}
                 Build:  #${env.BUILD_NUMBER}
@@ -58,8 +58,8 @@ pipeline {
 
                 Developers are expected to review the documentation
                 of all roles used by their Ansible playbook file.
-                =====================================================
-                """
+                ====================================================
+                """.replaceAll("(?m)^\\s+", "")
             }
         }
         stage('Checkout service') {
