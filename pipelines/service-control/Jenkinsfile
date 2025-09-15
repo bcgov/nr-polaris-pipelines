@@ -125,8 +125,6 @@ pipeline {
                         provider: "Jenkins Service Control",
                         serviceName: "${params.service}",
                         serviceProject: projectName,
-                        // triggerId: triggerId,
-                        // triggerUrl: env.TRIGGER_URL,
                         environment: "${params.environment}"
                     )
                     // if (params.controlAction == "start") {
@@ -134,7 +132,7 @@ pipeline {
                     // } else if (params.controlAction == "stop") {
                     //     intention.filterActionsByIds(['login', 'stop'])
                     // }
-                    echo "${intention.intention}"
+                    echo "${intention.intention.toJson()}"
 
 
                     intention.open()
