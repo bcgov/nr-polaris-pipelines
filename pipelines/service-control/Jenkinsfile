@@ -11,18 +11,18 @@ import groovy.json.JsonOutput
 def intention
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
-def appBaseDir = "app"
+def appBaseDir = 'app'
 def appPlaybookBaseDir
-def ansibleCollectionBaseDir = "collection"
-def ansibleInventoryBaseDir = "inventory"
-def podman = new Podman(this, "auth.json")
+def ansibleCollectionBaseDir = 'collection'
+def ansibleInventoryBaseDir = 'inventory'
+def podman = new Podman(this, 'auth.json')
 
 // Params
 // params.gitRepo
 // params.gitBasicAuth
 // params.gitTag
 // params.brokerJwt
-// params.user
+// params.brokerUser
 // params.service
 // params.environment
 // params.controlAction
@@ -126,7 +126,7 @@ pipeline {
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
                     echo "${params.environment}"
                     intention.setEventDetails(
-                        userName: params.user.toString(),
+                        userName: params.brokerUser.toString(),
                         url: env.BUILD_URL,
                         provider: "Jenkins Service Control",
                         serviceName: params.service.toString(),
@@ -183,7 +183,7 @@ pipeline {
 // params.gitBasicAuth
 // params.gitTag
 // params.brokerJwt
-// params.user
+// params.brokerUser
 // params.service
 // params.environment
 // params.controlAction
