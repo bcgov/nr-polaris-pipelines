@@ -6,6 +6,8 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
+import groovy.json.JsonOutput
+
 def intention
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
@@ -132,7 +134,8 @@ pipeline {
                     // } else if (params.controlAction == "stop") {
                     //     intention.filterActionsByIds(['login', 'stop'])
                     // }
-                    echo "${intention.intention.toJson()}"
+                    echo JsonOutput.toJson(intention.intention, 4)
+
 
 
                     intention.open()
