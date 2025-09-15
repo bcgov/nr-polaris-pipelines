@@ -118,11 +118,11 @@ pipeline {
                 script {
                     def projectName = serviceCatInfo.catalog.metadata.name
                     intention = new BrokerIntention(readJSON(file: "pipelines/service-control/service-control-intention.json"))
-                    if (params.controlAction == "start") {
-                        intention.filterActionsByIds(['login', 'start'])
-                    } else if (params.controlAction == "stop") {
-                        intention.filterActionsByIds(['login', 'stop'])
-                    }
+                    // if (params.controlAction == "start") {
+                    //     intention.filterActionsByIds(['login', 'start'])
+                    // } else if (params.controlAction == "stop") {
+                    //     intention.filterActionsByIds(['login', 'stop'])
+                    // }
                     intention.setEventDetails(
                         userName: "${params.user}",
                         url: env.BUILD_URL,
