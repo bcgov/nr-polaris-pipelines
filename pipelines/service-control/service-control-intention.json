@@ -1,0 +1,52 @@
+{
+  "event": {
+    "provider": "EVENT_PROVIDER",
+    "reason": "Job triggered",
+    "url": "JOB_URL",
+    "trigger": {
+      "id": "trigger-id",
+      "name": "GitHub Action",
+      "url": "trigger-url"
+    }
+  },
+  "actions": [
+    {
+      "action": "server-access",
+      "id": "login",
+      "provision": ["token/self"],
+      "service": {
+        "name": "nodejs-sample",
+        "project": "oscar-example",
+        "environment": "",
+        "target": {
+          "name": "jenkins-apps",
+          "project": "jenkins",
+          "environment": "production"
+        }
+      }
+    },
+    {
+      "action": "process-start",
+      "id": "start",
+      "provision": ["token/self"],
+      "service": {
+        "name": "nodejs-sample",
+        "project": "oscar-example",
+        "environment": ""
+      }
+    },
+    {
+      "action": "process-end",
+      "id": "end",
+      "provision": ["token/self"],
+      "service": {
+        "name": "nodejs-sample",
+        "project": "oscar-example",
+        "environment": ""
+      }
+    }
+  ],
+  "user": {
+    "name": "USER_ID"
+  }
+}

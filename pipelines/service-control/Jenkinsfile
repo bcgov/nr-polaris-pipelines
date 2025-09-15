@@ -7,12 +7,12 @@ import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
 def intention
-def podman
 def jp = new JenkinsPipeline(this)
 def serviceCatInfo
-def baseDir = 'app'
+def appBaseDir = 'app'
+def ansibleBaseDir = 'ansible'
 def playbookBaseDir
-
+def podman = new Podman(this, "\$(pwd)/auth.json")
 // Params
 // params.gitRepo
 // params.gitBasicAuth
@@ -35,6 +35,7 @@ pipeline {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+                    sh 'ls -al'
                 }
             }
         }
@@ -60,27 +61,28 @@ pipeline {
                 Developers are expected to review the documentation
                 of all roles used by their Ansible playbook file.
                 ====================================================
-                """.replaceAll("(?m)^\\s+", "")
+                """.replaceAll("(?m)^[ \t]+", "")
                 // Ensure clean workspace before starting
                 cleanWs(
                     deleteDirs: true,
                     patterns: [
-                        [pattern: "${baseDir}/*", type: 'INCLUDE']
+                        [pattern: "${appBaseDir}/*", type: 'INCLUDE']
                     ]
                 )
+                sh 'ls -al'
             }
         }
         stage('Checkout service') {
             steps {
                 script {
-                    dir(baseDir) {
+                    dir(appBaseDir) {
                         def catalogs = jp.retrieveRepoCatalogs(
                             params.gitRepo,
                             params.gitBasicAuth,
                             params.gitTag);
 
                         serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
-                        playbookBaseDir = "${baseDir}/${serviceCatInfo.dir}"
+                        playbookBaseDir = "${appBaseDir}/${serviceCatInfo.dir}"
                         if (serviceCatInfo == null) {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                         }
@@ -104,10 +106,70 @@ pipeline {
             steps {
                 dir(playbookBaseDir) {
                     script {
-                        jp.retrieveInventory()
+                        jp.retrieveAnsibleInventory()
                         sh 'ls -al'
                     }
                     echo "Retrieve inventory for service '${params.service}' in environment '${params.environment}'"
+                }
+            }
+        }
+        stage('Open Intention') {
+            steps {
+                script {
+                    def projectName = serviceCatInfo.catalog.metadata.name
+                    intention = new BrokerIntention(
+                        readJSON(file: "pipelines/service-control/service-control-intention.json")
+                    )
+                    if (params.controlAction == "start") {
+                        intention.filterActionsByIds(['login', 'start'])
+                    } else if (params.controlAction == "stop") {
+                        intention.filterActionsByIds(['login', 'stop'])
+                    }
+                    intention.setEventDetails(
+                        userName: "${params.user}",
+                        url: env.BUILD_URL,
+                        provider: "Jenkins Service Control",
+                        serviceName: "${params.service}",
+                        serviceProject: projectName,
+                        // triggerId: triggerId,
+                        // triggerUrl: env.TRIGGER_URL,
+                        environment: "${params.environment}"
+                    )
+
+                    intention.open("${params.brokerJwt}")
+                    intention.openResponse.actions.each { key, value ->
+                        env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
+                    }
+                }
+            }
+        }
+        stage('Login and prepare') {
+            steps {
+                script {
+                    intention.startAction("login")
+
+                    def vaultToken = intention.provisionToken("login", credentials('knox-jenkins-jenkins-apps-prod-role-id'))
+                    def vault = new Vault(vaultToken)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
+                    vault.revokeToken()
+
+                    podman.login(options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                }
+            }
+        }
+        stage('Retrieve collection') {
+            steps {
+                dir(ansibleBaseDir) {
+                    echo "Retrieve collection"
+                    script {
+                        def version = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
+                        def url = "git+https://github.com/bcgov/nr-polaris-collection.git#polaris/deploy${version}"
+                        def path = './collections/ansible_collections'
+
+                        jp.retrieveAnsibleCollection(podman, url, path)
+                        sh 'ls -al'
+                    }
                 }
             }
         }
@@ -124,29 +186,17 @@ pipeline {
 
         stage('Run service control') {
             environment {
-                ENV_LONG = "${params.environment}"
-                EVENT_PROVIDER = "Jenkins Service Control"
                 // GITHUB_RUNID= "${params.githubRunId}"
                 // TRIGGER_URL = "${params.triggerUrl}"
-                HTTP_PROXY = "${params.environment == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
-                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
-                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
-                GIT_CREDS = credentials('ci-user')
-                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
-                CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
-                AUTHFILE = "auth.json"
+                // HTTP_PROXY = "${params.environment == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
                     try {
-                        env.COMPONENT = serviceCatInfo.catalog.metadata.name
-                        echo "Modify ${env.ENV_LONG} environment"
+                        echo "Modify ${params.environment} environment"
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
-                        def triggerId = "${env.COMPONENT}:svcctrl:${env.GITHUB_RUNID}"
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-control-intention.json"))
                         if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
                         } else if (env.ENV_SHORT == 'test') {
@@ -154,46 +204,15 @@ pipeline {
                         } else if (env.ENV_SHORT == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
                         }
-                        intention.setEventDetails(
-                            userName: env.DEPLOYMENT_APPROVER,
-                            url: env.BUILD_URL,
-                            provider: env.EVENT_PROVIDER,
-                            triggerId: triggerId,
-                            triggerUrl: env.TRIGGER_URL,
-                            environment: env.ENV_LONG,
-                        )
-                        intention.open("${params.brokerJwt}")
-                        intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
-                        def vault = new Vault(vaultToken)
-                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-
-                        intention.startAction("start")
-                        intention.openResponse.actions.each { key, value ->
-                            env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
-                        }
-                        podman = new Podman(this)
-                        podman.login(
-                            authfile: "${env.AUTHFILE}",
-                            options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
-                            options: "-v \$(pwd):/ansible -e PODMAN_*",
-                            command: '/bin/sh -c "git config --global advice.detachedHead false && ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}"')
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/app:/ansible/app \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                                -v \$(pwd)/downloads:/ansible/downloads \
-                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
+                                -e PODMAN_* -e ACTION_TOKEN_*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
-                        podman.logout(authfile: "${env.AUTHFILE}")
-                        intention.endAction("start")
-
-                        vault.revokeToken()
+                                app/playbooks/playbook.yaml -e "proxy_env=${ENV_SHORT}"')
+                        podman.logout()
                         intention.endAction("login")
                         println intention.close(true)
                         intention = null
@@ -244,7 +263,7 @@ pipeline {
                 cleanWhenUnstable: false,
                 deleteDirs: true,
                 patterns: [
-                    [pattern: "${baseDir}/*", type: 'INCLUDE']
+                    [pattern: "${appBaseDir}/*", type: 'INCLUDE']
                 ]
             )
         }
