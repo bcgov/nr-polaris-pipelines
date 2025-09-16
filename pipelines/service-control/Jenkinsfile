@@ -215,8 +215,8 @@ pipeline {
                                 -v \$(pwd)/${ansibleInventoryBaseDir}:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -e PODMAN_* -e ACTION_TOKEN_*",
-                            command: "ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                playbook-svc.yaml -e \"proxy_env=${ENV_SHORT}\" -e \"env_vars=${ENV_SHORT}\" -e \"service_control_action=${params.controlAction}\"")
+                            command: "ansible-playbook -i inventory/\${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                playbook-svc.yaml -e \"proxy_env=\${ENV_SHORT}\" -e \"env_vars=\${ENV_SHORT}\" -e \"service_control_action=${params.controlAction}\"")
                         podman.logout()
                         intention.endAction("login")
                         println intention.close(true)
