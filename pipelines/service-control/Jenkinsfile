@@ -145,7 +145,7 @@ pipeline {
                         def path = '.'
 
                         jp.retrieveAnsibleCollection(podman, url, path)
-                        sh 'ls -al'
+                        // sh 'ls -al'
                     }
                 }
             }
