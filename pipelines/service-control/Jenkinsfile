@@ -167,7 +167,8 @@ pipeline {
                 dir(ansibleCollectionBaseDir) {
                     echo "Retrieve collection"
                     script {
-                        def version = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
+                        // def version = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
+                        def version = "main"
                         def url = "git+https://github.com/bcgov/nr-polaris-collection.git#polaris/deploy${version}"
                         def path = './collections/ansible_collections'
 
