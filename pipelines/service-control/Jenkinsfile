@@ -8,14 +8,14 @@ import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
 // Params
-// params.gitRepo
-// params.gitBasicAuth
-// params.gitTag
-// params.brokerJwt
-// params.brokerUser
-// params.service
-// params.environment
-// params.controlAction
+// params.gitRepo            [String: git repo URL]
+// params.gitBasicAuth       [String: credentialsId for git repo access]
+// params.gitTag             [String: branch or tag to checkout]
+// params.brokerJwt          [String: JWT for broker API access]
+// params.brokerUser         [String: user name for intention event details]
+// params.service            [String: service name to control]
+// params.environment        [List: development|test|production]
+// params.controlAction      [List: restart|start|stop]
 
 def intention
 def jp = new JenkinsPipeline(this)
