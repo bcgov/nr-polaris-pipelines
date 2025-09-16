@@ -201,12 +201,12 @@ pipeline {
                 script {
                     try {
                         echo "Modify ${params.environment} environment"
-                        env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
-                        if (env.ENV_SHORT == 'dev') {
+                        def envShort = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                        if (envShort == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
-                        } else if (env.ENV_SHORT == 'test') {
+                        } else if (envShort == 'test') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smttest'
-                        } else if (env.ENV_SHORT == 'prod') {
+                        } else if (envShort == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
                         }
                         sh "cp pipelines/service-control/playbook-svc.yaml ${appPlaybookBaseDir}/playbook-svc.yaml"
@@ -217,7 +217,7 @@ pipeline {
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -e PODMAN_* -e ACTION_TOKEN_*",
                             command: "ansible-playbook -i inventory/\${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                app/playbooks/playbook-svc.yaml -e \"proxy_env=\${ENV_SHORT}\" -e \"env_vars=\${ENV_SHORT}\" -e \"service_control_action=${params.controlAction}\"")
+                                app/playbooks/playbook-svc.yaml -e \"proxy_env=${envShort}\" -e \"env_vars=${envShort}\" -e \"service_control_action=${params.controlAction}\"")
                         podman.logout()
                         intention.endAction("login")
                         println intention.close(true)
