@@ -40,21 +40,22 @@ pipeline {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+
+                    // Ensure clean workspace before starting
+                    cleanWs(
+                        deleteDirs: true,
+                        patterns: [
+                            [pattern: "${appBaseDir}", type: 'INCLUDE'],
+                            [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
+                        ]
+                    )
                 }
             }
         }
         stage('Banner') {
             steps {
                 jp.banner(env, 'service-control')
-                // Ensure clean workspace before starting
-                cleanWs(
-                    deleteDirs: true,
-                    patterns: [
-                        [pattern: "${appBaseDir}", type: 'INCLUDE'],
-                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
-                    ]
-                )
-                sh 'ls -al'
+                // sh 'ls -al'
             }
         }
         stage('Checkout service') {
