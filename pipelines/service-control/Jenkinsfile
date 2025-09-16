@@ -212,7 +212,7 @@ pipeline {
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app/playbooks \
-                                -v \$(pwd)/${ansibleInventoryBaseDir}:/ansible/inventory \
+                                -v \$(pwd)/${ansibleInventoryBaseDir}/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -e PODMAN_* -e ACTION_TOKEN_*",
                             command: "ansible-playbook -i inventory/\${PODMAN_ANSIBLE_INVENTORY_PATH} \
