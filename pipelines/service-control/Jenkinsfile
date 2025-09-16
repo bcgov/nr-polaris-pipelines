@@ -211,12 +211,12 @@ pipeline {
                         sh "cp pipelines/service-control/playbook-svc.yaml ${appPlaybookBaseDir}/playbook-svc.yaml"
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app \
+                                -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app/playbooks \
                                 -v \$(pwd)/${ansibleInventoryBaseDir}:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -e PODMAN_* -e ACTION_TOKEN_*",
                             command: "ansible-playbook -i inventory/\${PODMAN_ANSIBLE_INVENTORY_PATH} \
-                                playbook-svc.yaml -e \"proxy_env=\${ENV_SHORT}\" -e \"env_vars=\${ENV_SHORT}\" -e \"service_control_action=${params.controlAction}\"")
+                                app/playbooks/playbook-svc.yaml -e \"proxy_env=\${ENV_SHORT}\" -e \"env_vars=\${ENV_SHORT}\" -e \"service_control_action=${params.controlAction}\"")
                         podman.logout()
                         intention.endAction("login")
                         println intention.close(true)
