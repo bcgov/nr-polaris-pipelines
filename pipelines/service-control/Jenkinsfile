@@ -49,13 +49,15 @@ pipeline {
                             [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
                         ]
                     )
+                    // sh 'ls -al'
                 }
             }
         }
         stage('Banner') {
             steps {
-                jp.banner(env, 'service-control')
-                // sh 'ls -al'
+                script {
+                    jp.banner(env, 'service-control')
+                }
             }
         }
         stage('Checkout service') {
