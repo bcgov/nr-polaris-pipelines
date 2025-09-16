@@ -211,7 +211,7 @@ pipeline {
                         }
                         sh "cp pipelines/service-control/playbook-svc.yaml ${appPlaybookBaseDir}/playbook-svc.yaml"
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/collections \
+                            options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
                                 -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app/playbooks \
                                 -v \$(pwd)/${ansibleInventoryBaseDir}/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
