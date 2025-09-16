@@ -3,6 +3,7 @@
     "provider": "EVENT_PROVIDER",
     "reason": "Job triggered",
     "url": "JOB_URL",
+    "transient": true,
     "trigger": {
       "id": "trigger-id",
       "name": "GitHub Action",
