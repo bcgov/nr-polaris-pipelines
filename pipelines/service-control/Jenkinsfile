@@ -17,7 +17,7 @@ def appBaseDir = 'app'
 def servicePlaybookBaseDir // Discovered during checkout of service repo
 def ansibleCollectionBaseDir = 'collections'
 def ansibleInventoryBaseDir = 'inventory'
-def podman = new Podman(this, 'auth.json')
+def podman = new Podman(this, null, 'auth.json')
 
 // Params
 // params.gitRepo
