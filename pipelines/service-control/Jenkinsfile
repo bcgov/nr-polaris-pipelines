@@ -71,10 +71,7 @@ pipeline {
                     deleteDirs: true,
                     patterns: [
                         [pattern: "${appBaseDir}", type: 'INCLUDE'],
-                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE'],
-                        [pattern: "\$(pwd)", type: 'INCLUDE'],
-                        [pattern: "collection", type: 'INCLUDE'],
-                        [pattern: "collection@tmp", type: 'INCLUDE']
+                        [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
                     ]
                 )
                 sh 'ls -al'
@@ -150,7 +147,7 @@ pipeline {
         stage('Login and prepare') {
             steps {
                 script {
-                    jp.loginAndPreparePodman(intention, podman)
+                    jp.loginAndPreparePodman(intention, podman, env)
                 }
             }
         }
