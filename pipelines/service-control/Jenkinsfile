@@ -148,7 +148,11 @@ pipeline {
             }
         }
         stage('Login and prepare') {
-            jp.loginAndPreparePodmanSteps(intention, podman)
+            steps {
+                script {
+                    jp.loginAndPreparePodman(intention, podman)
+                }
+            }
         }
         stage('Retrieve collection') {
             steps {
