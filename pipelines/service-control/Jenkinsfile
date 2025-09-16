@@ -2,6 +2,7 @@
 import ca.bc.gov.nrids.polaris.BrokerApi
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.JenkinsPipeline
+import ca.bc.gov.nrids.polaris.JenkinsRepo
 import ca.bc.gov.nrids.polaris.JenkinsUtil
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
@@ -10,9 +11,10 @@ import groovy.json.JsonOutput
 
 def intention
 def jp = new JenkinsPipeline(this)
+def repo = new JenkinsRepo(this)
 def serviceCatInfo
 def appBaseDir = 'app'
-def appPlaybookBaseDir
+def servicePlaybookBaseDir // Discovered during checkout of service repo
 def ansibleCollectionBaseDir = 'collections'
 def ansibleInventoryBaseDir = 'inventory'
 def podman = new Podman(this, 'auth.json')
@@ -70,12 +72,11 @@ pipeline {
                     patterns: [
                         [pattern: "${appBaseDir}", type: 'INCLUDE'],
                         [pattern: "${appBaseDir}@tmp", type: 'INCLUDE'],
-                        [pattern: "infra", type: 'INCLUDE'],
-                        [pattern: "infra@tmp", type: 'INCLUDE']
+                        [pattern: "$(pwd)", type: 'INCLUDE'],
+                        [pattern: "collection", type: 'INCLUDE']
+                        [pattern: "collection@tmp", type: 'INCLUDE']
                     ]
                 )
-                echo appBaseDir
-                echo ansibleCollectionBaseDir
                 sh 'ls -al'
             }
         }
@@ -83,28 +84,29 @@ pipeline {
             steps {
                 script {
                     dir(appBaseDir) {
-                        def catalogs = jp.retrieveRepoCatalogs(
+                        repo.setupSparseCheckout(
                             params.gitRepo,
                             params.gitBasicAuth,
                             params.gitTag);
+                        def catalogs = repo.retrieveRepoCatalogs();
 
-                        serviceCatInfo = jp.findServiceInCatalogs(catalogs, params.service);
+                        serviceCatInfo = repo.findServiceInCatalogs(catalogs, params.service);
                         if (serviceCatInfo == null) {
                             error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
                         }
                         echo "Found service '${params.service}' in catalog: ${serviceCatInfo.path}"
-                        appPlaybookBaseDir = 'app/' + jp.retrieveServicePlaybooks(serviceCatInfo)
+                        servicePlaybookBaseDir = 'app/' + repo.retrieveServicePlaybookDir(serviceCatInfo)
                     }
                     def brokerApi = new BrokerApi("${params.brokerJwt}")
                     def serviceIds = brokerApi.doUniqueKeyCheck('service', 'name', params.service)
-                    echo serviceIds.join('\n')
+
                     if (serviceIds.size() == 0) {
                         error "Service '${params.service}' not found in broker"
                     } else if (serviceIds.size() > 1) {
                         error "Multiple services named '${params.service}' found in broker: ${serviceIds.join(', ')}"
                     }
                     def service = brokerApi.getCollectionById('service', serviceIds[0])
-                    echo "Found service in broker: ${service}"
+                    echo "Found service '${params.service}' in broker with id ${service.id}"
                 }
             }
         }
@@ -113,9 +115,7 @@ pipeline {
                 dir(ansibleInventoryBaseDir) {
                     script {
                         jp.retrieveAnsibleInventory()
-                        sh 'ls -al'
                     }
-                    echo "Retrieve inventory for service '${params.service}' in environment '${params.environment}'"
                 }
             }
         }
@@ -133,11 +133,11 @@ pipeline {
                         serviceProject: projectName,
                         environment: params.environment.toString()
                     )
-                    // if (params.controlAction == "start") {
-                    //     intention.filterActionsByIds(['login', 'start'])
-                    // } else if (params.controlAction == "stop") {
-                    //     intention.filterActionsByIds(['login', 'stop'])
-                    // }
+                    if (params.controlAction == "start") {
+                        intention.filterActionsByIds(['login', 'start'])
+                    } else if (params.controlAction == "stop") {
+                        intention.filterActionsByIds(['login', 'stop'])
+                    }
                     echo "${intention.intention.actions[0].service.environment}"
 
                     intention.open()
@@ -148,19 +148,7 @@ pipeline {
             }
         }
         stage('Login and prepare') {
-            steps {
-                script {
-                    intention.startAction("login")
-
-                    def vaultToken = intention.provisionToken("login", credentials('knox-jenkins-jenkins-apps-prod-role-id'))
-                    def vault = new Vault(vaultToken)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
-                    vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
-                    vault.revokeToken()
-
-                    podman.login(options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                }
-            }
+            jp.loginAndPreparePodmanSteps(intention, podman)
         }
         stage('Retrieve collection') {
             steps {
@@ -209,10 +197,10 @@ pipeline {
                         } else if (envShort == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
                         }
-                        sh "cp pipelines/service-control/playbook-svc.yaml ${appPlaybookBaseDir}/playbook-svc.yaml"
+                        sh "cp pipelines/service-control/playbook-svc.yaml ${servicePlaybookBaseDir}/playbook-svc.yaml"
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
-                                -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app/playbooks \
+                                -v \$(pwd)/${servicePlaybookBaseDir}:/ansible/app/playbooks \
                                 -v \$(pwd)/${ansibleInventoryBaseDir}/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -e PODMAN_* -e ACTION_TOKEN_*",
