@@ -13,7 +13,7 @@ def jp = new JenkinsPipeline(this)
 def serviceCatInfo
 def appBaseDir = 'app'
 def appPlaybookBaseDir
-def ansibleCollectionBaseDir = 'collection'
+def ansibleCollectionBaseDir = 'collections'
 def ansibleInventoryBaseDir = 'inventory'
 def podman = new Podman(this, 'auth.json')
 
@@ -170,7 +170,7 @@ pipeline {
                         // def version = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
                         def version = ",main"
                         def url = "git+https://github.com/bcgov/nr-polaris-collection.git#polaris/deploy${version}"
-                        def path = './collections/ansible_collections'
+                        def path = '.'
 
                         jp.retrieveAnsibleCollection(podman, url, path)
                         sh 'ls -al'
@@ -211,7 +211,7 @@ pipeline {
                         }
                         sh "cp pipelines/service-control/playbook-svc.yaml ${appPlaybookBaseDir}/playbook-svc.yaml"
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
-                            options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
+                            options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/collections \
                                 -v \$(pwd)/${appPlaybookBaseDir}:/ansible/app/playbooks \
                                 -v \$(pwd)/${ansibleInventoryBaseDir}/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
