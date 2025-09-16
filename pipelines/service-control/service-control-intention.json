@@ -38,7 +38,7 @@
     },
     {
       "action": "process-end",
-      "id": "end",
+      "id": "stop",
       "provision": [],
       "service": {
         "name": "nodejs-sample",
