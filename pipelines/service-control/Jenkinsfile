@@ -7,18 +7,6 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.Vault
 
-import groovy.json.JsonOutput
-
-def intention
-def jp = new JenkinsPipeline(this)
-def repo = new JenkinsRepo(this)
-def serviceCatInfo
-def appBaseDir = 'app'
-def servicePlaybookBaseDir // Discovered during checkout of service repo
-def ansibleCollectionBaseDir = 'collections'
-def ansibleInventoryBaseDir = 'inventory'
-def podman = new Podman(this, null, 'auth.json')
-
 // Params
 // params.gitRepo
 // params.gitBasicAuth
@@ -28,6 +16,18 @@ def podman = new Podman(this, null, 'auth.json')
 // params.service
 // params.environment
 // params.controlAction
+
+def intention
+def jp = new JenkinsPipeline(this)
+def repo = new JenkinsRepo(this)
+def podman = new Podman(this, null, 'auth.json')
+// Service catalog info for the requested service
+def serviceCatInfo
+// Paths
+def appBaseDir = 'app'
+def servicePlaybookBaseDir // Discovered during checkout of service repo
+def ansibleCollectionBaseDir = 'collections'
+def ansibleInventoryBaseDir = 'inventory'
 
 pipeline {
     agent {
@@ -104,7 +104,6 @@ pipeline {
                 script {
                     def projectName = serviceCatInfo.catalog.spec.system
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
-                    echo "${params.environment}"
                     intention.setEventDetails(
                         userName: params.brokerUser.toString(),
                         url: env.BUILD_URL,
@@ -118,7 +117,6 @@ pipeline {
                     } else if (params.controlAction == "stop") {
                         intention.filterActionsByIds(['login', 'stop'])
                     }
-                    echo "${intention.intention.actions[0].service.environment}"
 
                     intention.open()
                     intention.openResponse.actions.each { key, value ->
