@@ -201,7 +201,7 @@ pipeline {
                 script {
                     try {
                         echo "Modify ${params.environment} environment"
-                        def envShort = JenkinsUtil.convertLongEnvToShort(params.envLong.toString())
+                        def envShort = JenkinsUtil.convertLongEnvToShort(params.environment.toString())
                         if (envShort == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
                         } else if (envShort == 'test') {
