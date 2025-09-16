@@ -194,14 +194,14 @@ pipeline {
                 // GITHUB_RUNID= "${params.githubRunId}"
                 // TRIGGER_URL = "${params.triggerUrl}"
                 // HTTP_PROXY = "${params.environment == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
-                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
-                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+                // PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
+                // PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
             steps {
                 script {
                     try {
                         echo "Modify ${params.environment} environment"
-                        def envShort = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                        def envShort = JenkinsUtil.convertLongEnvToShort(params.envLong.toString())
                         if (envShort == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
                         } else if (envShort == 'test') {
