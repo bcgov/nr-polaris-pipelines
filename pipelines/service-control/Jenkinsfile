@@ -72,7 +72,7 @@ pipeline {
                     patterns: [
                         [pattern: "${appBaseDir}", type: 'INCLUDE'],
                         [pattern: "${appBaseDir}@tmp", type: 'INCLUDE'],
-                        [pattern: "$(pwd)", type: 'INCLUDE'],
+                        [pattern: "\$(pwd)", type: 'INCLUDE'],
                         [pattern: "collection", type: 'INCLUDE']
                         [pattern: "collection@tmp", type: 'INCLUDE']
                     ]
