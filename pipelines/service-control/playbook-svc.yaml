@@ -1,0 +1,15 @@
+---
+- name: oscar-example/nodejs-sample
+  hosts: "{{ tomcat_server_hosts }}"
+  collections:
+    - polaris.deploy
+  vars_files:
+    - "vars/standard/all.yaml"
+    - "vars/standard/{{env_vars}}.yaml"
+    - "vars/custom/all.yaml"
+    - "vars/custom/{{env_vars}}.yaml"
+
+  roles:
+    - role: service_control
+      vars:
+        service_control_action: "{{ service_control_action | default('restart') } }"

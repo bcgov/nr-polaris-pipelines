@@ -1,0 +1,230 @@
+@Library('polaris@feat/stages')
+import ca.bc.gov.nrids.polaris.BrokerApi
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.JenkinsPipeline
+import ca.bc.gov.nrids.polaris.JenkinsRepo
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.Vault
+
+// Params
+// params.gitRepo            [String: git repo URL]
+// params.gitBasicAuth       [String: credentialsId for git repo access]
+// params.gitTag             [String: branch or tag to checkout]
+// params.brokerJwt          [String: JWT for broker API access]
+// params.brokerUser         [String: user name for intention event details]
+// params.service            [String: service name to control]
+// params.environment        [List: development|test|production]
+// params.controlAction      [List: restart|start|stop]
+
+def intention
+def jp = new JenkinsPipeline(this)
+def repo = new JenkinsRepo(this)
+def podman = new Podman(this, null, 'auth.json')
+// Service catalog info for the requested service
+def serviceCatInfo
+// Paths
+def appBaseDir = 'app'
+def servicePlaybookBaseDir // Discovered during checkout of service repo
+def ansibleCollectionBaseDir = 'collections'
+def ansibleInventoryBaseDir = 'inventory'
+
+pipeline {
+    agent {
+        label Podman.AGENT_LABEL_APP
+    }
+
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    // Set the build display name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.environment ?: 'unknown-env'}: ${params.controlAction ?: 'no-action'}"
+
+                    // Ensure clean workspace before starting
+                    cleanWs(
+                        deleteDirs: true,
+                        patterns: [
+                            [pattern: "${appBaseDir}", type: 'INCLUDE'],
+                            [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
+                        ]
+                    )
+                    // sh 'ls -al'
+                }
+            }
+        }
+        stage('Banner') {
+            steps {
+                script {
+                    jp.banner(env, 'service-control')
+                }
+            }
+        }
+        stage('Checkout service') {
+            steps {
+                script {
+                    dir(appBaseDir) {
+                        repo.setupSparseCheckout(
+                            params.gitRepo,
+                            params.gitBasicAuth,
+                            params.gitTag);
+                        def catalogs = repo.retrieveRepoCatalogs();
+
+                        serviceCatInfo = repo.findServiceInCatalogs(catalogs, params.service);
+                        if (serviceCatInfo == null) {
+                            error "Service '${params.service}' not found in catalog(s) of repo '${params.gitRepo}'"
+                        }
+                        echo "Found service '${params.service}' in catalog: ${serviceCatInfo.path}"
+                        servicePlaybookBaseDir = 'app/' + repo.retrieveServicePlaybookDir(serviceCatInfo)
+                    }
+                    def brokerApi = new BrokerApi("${params.brokerJwt}")
+                    def serviceIds = brokerApi.doUniqueKeyCheck('service', 'name', params.service)
+
+                    if (serviceIds.size() == 0) {
+                        error "Service '${params.service}' not found in broker"
+                    } else if (serviceIds.size() > 1) {
+                        error "Multiple services named '${params.service}' found in broker: ${serviceIds.join(', ')}"
+                    }
+                    def service = brokerApi.getCollectionById('service', serviceIds[0])
+                    echo "Found service '${params.service}' in broker with id ${service.id}"
+                }
+            }
+        }
+        stage('Retrieve inventory') {
+            steps {
+                dir(ansibleInventoryBaseDir) {
+                    script {
+                        jp.retrieveAnsibleInventory()
+                    }
+                }
+            }
+        }
+        stage('Open Intention') {
+            steps {
+                script {
+                    def projectName = serviceCatInfo.catalog.spec.system
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "pipelines/service-control/service-control-intention.json"))
+                    intention.setEventDetails(
+                        userName: params.brokerUser.toString(),
+                        url: env.BUILD_URL,
+                        provider: "Jenkins Service Control",
+                        serviceName: params.service.toString(),
+                        serviceProject: projectName,
+                        environment: params.environment.toString()
+                    )
+                    if (params.controlAction == "start") {
+                        intention.filterActionsByIds(['login', 'start'])
+                    } else if (params.controlAction == "stop") {
+                        intention.filterActionsByIds(['login', 'stop'])
+                    }
+
+                    intention.open()
+                    intention.openResponse.actions.each { key, value ->
+                        env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
+                    }
+                }
+            }
+        }
+        stage('Login and prepare') {
+            steps {
+                script {
+                    jp.loginAndPreparePodman(intention, podman, env)
+                }
+            }
+        }
+        stage('Retrieve collection') {
+            steps {
+                dir(ansibleCollectionBaseDir) {
+                    echo "Retrieve collection"
+                    script {
+                        // def version = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
+                        def version = ",main"
+                        def url = "git+https://github.com/bcgov/nr-polaris-collection.git#polaris/deploy${version}"
+                        def path = '.'
+
+                        jp.retrieveAnsibleCollection(podman, url, path)
+                        // sh 'ls -al'
+                    }
+                }
+            }
+        }
+        stage('Run service control') {
+            steps {
+                script {
+                    try {
+                        echo "Modify ${params.environment} environment"
+                        def envShort = JenkinsUtil.convertLongEnvToShort(params.environment.toString())
+                        if (envShort == 'dev') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smtdlvr'
+                        } else if (envShort == 'test') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'smttest'
+                        } else if (envShort == 'prod') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = 'prod'
+                        }
+                        sh "cp pipelines/service-control/playbook-svc.yaml ${servicePlaybookBaseDir}/playbook-svc.yaml"
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                            options: "-v \$(pwd)/${ansibleCollectionBaseDir}:/ansible/app/playbooks/collections \
+                                -v \$(pwd)/${servicePlaybookBaseDir}:/ansible/app/playbooks \
+                                -v \$(pwd)/${ansibleInventoryBaseDir}/inventory:/ansible/inventory \
+                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -e PODMAN_* -e ACTION_TOKEN_*",
+                            command: "ansible-playbook -i inventory/\${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                app/playbooks/playbook-svc.yaml -e \"proxy_env=${envShort}\" -e \"env_vars=${envShort}\" -e \"service_control_action=${params.controlAction}\"")
+                        podman.logout()
+                        intention.endAction("login")
+                        println intention.close(true)
+                        intention = null
+                    } catch (IllegalStateException ex) {
+                        echo "IllegalStateException occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    } catch (IllegalArgumentException ex) {
+                        echo "IllegalArgumentException occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    } catch (Exception ex) {
+                        echo "Other exception occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    }
+                }
+            }
+        }
+    }
+    post {
+        unstable {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        failure {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        aborted {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        always {
+            cleanWs(
+                cleanWhenAborted: true,
+                cleanWhenFailure: false,
+                cleanWhenSuccess: true,
+                cleanWhenUnstable: false,
+                deleteDirs: true,
+                patterns: [
+                    [pattern: "${appBaseDir}", type: 'INCLUDE'],
+                    [pattern: "${appBaseDir}@tmp", type: 'INCLUDE']
+                ]
+            )
+        }
+    }
+}
