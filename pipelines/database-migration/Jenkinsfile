@@ -238,9 +238,9 @@ pipeline {
                     // extract message and send notification
                     sh """
                         ONFAIL_WARNING_COUNT="\$(grep '${ONFAIL_GREP_PATTERN}' ${TMP_OUTPUT_FILE} | wc -l)"
-                        if [ \$ONFAIL_WARNING_COUNT -gt 0 ] && [ "$TARGET_ENV" = "production" ]; then
+                        if [ \$ONFAIL_WARNING_COUNT -gt 0 ] && ([ "$TARGET_ENV" = "production" ] || [ "$TARGET_ENV" = "test" ]); then
                             ONFAIL_MESSAGE="\$(sed -n '/${ONFAIL_GREP_PATTERN}/{N;p}' ${TMP_OUTPUT_FILE})"
-                            printf "${BUILD_URL}\n\n\${ONFAIL_MESSAGE}" | mailx -s "Data quality issue detected" "${NOTIFICATION_RECIPIENTS}"
+                            printf "${BUILD_URL}\n\n\${ONFAIL_MESSAGE}" | mailx -s "Data quality issue detected on ${TARGET_ENV}" "${NOTIFICATION_RECIPIENTS}"
                         fi
                     """
                     // tag version in liquibase
