@@ -68,7 +68,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get github app creds
-                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-github-app-transient.json'))
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-github-app-transient.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -128,7 +128,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get registry and db creds
-                    intention = new BrokerIntention(readJSON(file: 'scripts/intention-database-transient.json'))
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-database-transient.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -145,7 +145,7 @@ pipeline {
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     env.APP_VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
-                    podman = new Podman(this, null)
+                    podman = new Podman(this)
                     podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.APP_VAULT_TOKEN, password: APP_VAULT_TOKEN]]]) {
                         podman.run("${CONTAINER_IMAGE_CONSUL_TEMPLATE}",

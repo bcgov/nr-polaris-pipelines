@@ -73,7 +73,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do development deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -172,7 +172,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do test deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -276,13 +276,13 @@ pipeline {
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
                 CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
-                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")                
+                APP_ROLE_ID = credentials("knox-${params.project}-${params.component}-prod-role-id")
             }
             steps {
                 script {
                     try {
                         echo 'Do production deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/jasper-reports-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
