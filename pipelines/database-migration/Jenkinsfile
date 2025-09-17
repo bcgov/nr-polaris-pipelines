@@ -64,7 +64,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get github app creds
-                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-github-app.json'))
+                    intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-github-app.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -73,7 +73,7 @@ pipeline {
                         serviceProject: env.SERVICE_PROJECT,
                         environment: "tools"
                     )
-                    intention.open(NR_BROKER_TOKEN)
+                    intention.open()
                     intention.startAction("login")
                     def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vaultGhApp = new Vault(vaultGhToken)
@@ -144,7 +144,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get registry and db creds
-                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-database.json'))
+                    intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -153,7 +153,7 @@ pipeline {
                         serviceProject: env.SERVICE_PROJECT,
                         environment: env.TARGET_ENV
                     )
-                    intention.open(NR_BROKER_TOKEN)
+                    intention.open()
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vault = new Vault(vaultToken)
