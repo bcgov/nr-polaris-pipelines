@@ -109,7 +109,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do development deployment'
-                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -118,7 +118,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        intention.open(NR_BROKER_JWT)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -249,7 +249,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do test deployment'
-                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.TEST_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
@@ -258,7 +258,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        intention.open(NR_BROKER_JWT)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -400,7 +400,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do production deployment'
-                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
@@ -409,7 +409,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        intention.open(NR_BROKER_JWT)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)

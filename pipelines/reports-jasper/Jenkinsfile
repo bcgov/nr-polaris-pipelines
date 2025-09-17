@@ -95,8 +95,7 @@ pipeline {
                             triggerUrl: env.TRIGGER_URL,
                             environment: env.ENV_LONG
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)

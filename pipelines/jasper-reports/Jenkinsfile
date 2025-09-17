@@ -80,8 +80,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'development'
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -179,8 +178,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'test'
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -289,8 +287,7 @@ pipeline {
                             provider: env.EVENT_PROVIDER,
                             environment: 'production'
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)

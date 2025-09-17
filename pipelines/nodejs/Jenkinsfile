@@ -148,8 +148,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -273,8 +272,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -400,8 +398,7 @@ pipeline {
                             packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
                             packageInstallationSourceIntention: env.INTENTION_ID
                         )
-                        def brokerJwt = "${params.brokerJwt}"
-                        intention.open(brokerJwt)
+                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
