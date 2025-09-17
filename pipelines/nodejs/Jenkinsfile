@@ -50,7 +50,7 @@ pipeline {
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
-                                git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins catalog-info.yaml ${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                             '''
                             sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin '
@@ -61,7 +61,7 @@ pipeline {
                             git config --global advice.detachedHead false
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
-                            git sparse-checkout set .jenkins ${PLAYBOOKS_PATH}
+                            git sparse-checkout set .jenkins catalog-info.yaml ${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
                         '''
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
@@ -139,7 +139,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do development deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -264,7 +264,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do test deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.TEST_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,
@@ -391,7 +391,7 @@ pipeline {
                 script {
                     try {
                         echo 'Do production deployment'
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/deployment-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/deployment-intention.json"))
                         intention.setEventDetails(
                             userName: "${env.PRODUCTION_DEPLOYMENT_APPROVER}",
                             url: env.BUILD_URL,

@@ -78,7 +78,7 @@ pipeline {
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
-                CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")                
+                CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
             }
             steps {
                 script {
@@ -86,7 +86,7 @@ pipeline {
                         echo "Do ${env.ENV_LONG} deployment"
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
                         def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-intention.json"))
                         intention.setEventDetails(
                             userName: env.CAUSE_USER_ID,
                             url: env.BUILD_URL,
@@ -117,7 +117,7 @@ pipeline {
                         intention.openResponse.actions.each { key, value ->
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
-                        podman = new Podman(this)                        
+                        podman = new Podman(this)
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.sa_username} -p ${env.sa_password}")
                         podman.run("willhallonline/ansible:2.17-alpine-3.20",
                             authfile: "${env.AUTHFILE}",

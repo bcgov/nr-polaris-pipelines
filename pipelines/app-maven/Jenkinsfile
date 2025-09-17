@@ -63,7 +63,7 @@ pipeline {
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                                git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
@@ -76,7 +76,7 @@ pipeline {
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
                             git sparse-checkout init --cone
-                            git sparse-checkout set .jenkins ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                            git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                             git checkout ${GIT_BRANCH}
                         '''
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
@@ -155,7 +155,7 @@ pipeline {
                         echo "Deploy to ${env.ENV_LONG} environment"
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
                         def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
-                        intention = new BrokerIntention(readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                         if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
                         } else if (env.ENV_SHORT == 'test') {
