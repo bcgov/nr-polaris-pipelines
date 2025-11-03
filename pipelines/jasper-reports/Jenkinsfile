@@ -1,4 +1,4 @@
-@Library('polaris')
+@Library('polaris@v2.0.0')
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
