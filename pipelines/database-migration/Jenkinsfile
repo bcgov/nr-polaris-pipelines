@@ -58,6 +58,7 @@ pipeline {
                 script {
                     env.CAUSE_USER_ID = JenkinsUtil.getCauseUserId(currentBuild)
                 }
+                sh "mkdir -p ${TMP_VOLUME} && chmod 775 ${TMP_VOLUME}"
             }
         }
         stage('Get github token') {

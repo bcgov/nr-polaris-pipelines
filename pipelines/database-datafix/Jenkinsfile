@@ -62,6 +62,7 @@ pipeline {
                         JenkinsUtil.getCauseUserId(currentBuild)}"""
                     env.TARGET_ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${env.TARGET_ENV}")
                 }
+                sh "mkdir -p ${TMP_VOLUME} && chmod 775 ${TMP_VOLUME}"
             }
         }
         stage('Get github token') {
