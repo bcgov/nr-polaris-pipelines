@@ -77,6 +77,7 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        cd app
                         PLAYBOOKS_PATH="playbooks"
                         JASPER_PATH="jasper-server"
                         git sparse-checkout set .jenkins "$PLAYBOOKS_PATH" "$JASPER_PATH"
