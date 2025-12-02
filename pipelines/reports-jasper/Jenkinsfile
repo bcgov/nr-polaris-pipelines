@@ -50,10 +50,24 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh '''
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout init --cone
+                                git sparse-checkout set .jenkins playbooks jasper-server
+                                git checkout ${GIT_BRANCH}
+                            '''
                         }
                     } else {
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh '''
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout init --cone
+                            git sparse-checkout set .jenkins playbooks jasper-server
+                            git checkout ${GIT_BRANCH}
+                        '''
                     }
                 }
             }
