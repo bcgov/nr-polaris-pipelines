@@ -27,14 +27,14 @@ pipeline {
                     echo ""
                     echo "Standard Jasper report deployment pipeline"
                     echo ""
-                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/jasper-reports"
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/reports-jasper"
                     echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
                     echo ""
                     echo "Developers are expected to review the documentation of all roles used by their Ansible playbook file."
                 }
             }
         }
-        stage('Checkout app') {
+        stage('Checkout catalog') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
@@ -55,7 +55,6 @@ pipeline {
                                 git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
-                                git sparse-checkout set .jenkins playbooks jasper-server
                                 git checkout ${GIT_BRANCH}
                             '''
                         }
@@ -65,10 +64,23 @@ pipeline {
                             git clone -q --no-checkout https://${GIT_REPO} app
                             cd app
                             git sparse-checkout init --cone
-                            git sparse-checkout set .jenkins playbooks jasper-server
                             git checkout ${GIT_BRANCH}
                         '''
                     }
+                }
+            }
+        }
+        stage('Sparse checkout app') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    sh '''
+                        PLAYBOOKS_PATH="playbooks"
+                        JASPER_PATH="jasper-server"
+                        git sparse-checkout set .jenkins "$PLAYBOOKS_PATH" "$JASPER_PATH"
+                    '''
                 }
             }
         }
