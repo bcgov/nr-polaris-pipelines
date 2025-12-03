@@ -34,7 +34,7 @@ pipeline {
                 }
             }
         }
-        stage('Checkout catalog') {
+        stage('Sparse checkout jasper app') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
@@ -73,15 +73,6 @@ pipeline {
                     if (env.CATALOG_JASPER_PATH.contains("{{ playbook_dir }}")) {
                       env.CATALOG_JASPER_PATH = env.CATALOG_JASPER_PATH.replaceAll("\\{\\{ playbook_dir \\}\\}", env.CATALOG_PLAYBOOK_PATH)
                     }
-                }
-            }
-        }
-        stage('Sparse checkout app') {
-            agent {
-                label Podman.AGENT_LABEL_APP
-            }
-            steps {
-                script {
                     sh '''
                         cd app
                         git sparse-checkout set .jenkins "$CATALOG_PLAYBOOK_PATH" "$CATALOG_JASPER_PATH/jasper-server"
