@@ -73,7 +73,6 @@ pipeline {
                     if (env.CATALOG_JASPER_PATH.contains("{{ playbook_dir }}")) {
                       env.CATALOG_JASPER_PATH = env.CATALOG_JASPER_PATH.replaceAll("\\{\\{ playbook_dir \\}\\}", env.CATALOG_PLAYBOOK_PATH)
                     }
-                    echo "Will run: git sparse-checkout set .jenkins ${env.CATALOG_PLAYBOOK_PATH} ${env.CATALOG_JASPER_PATH}/jasper-server"
                 }
             }
         }
