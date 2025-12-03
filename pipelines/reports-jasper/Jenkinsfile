@@ -68,7 +68,7 @@ pipeline {
                         '''
                     }
                     def backstage = readYaml (file: 'app/catalog-info.yaml')
-                    echo backstage['metadata']['playbook.io.nrs.gov.bc.ca/playbookPath']
+                    echo backstage['metadata']['playbook.io.nrs.gov.bc.ca/playbookPath'][0]
                 }
             }
         }
