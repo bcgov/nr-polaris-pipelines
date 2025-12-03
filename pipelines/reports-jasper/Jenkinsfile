@@ -68,7 +68,12 @@ pipeline {
                         '''
                     }
                     def backstage = readYaml (file: 'app/catalog-info.yaml')
-                    echo backstage['metadata']['annotations']['playbook.io.nrs.gov.bc.ca/playbookPath']
+                    env.CATALOG_PLAYBOOK_PATH = backstage['metadata']['annotations']['playbook.io.nrs.gov.bc.ca/playbookPath']
+                    env.CATALOG_JASPER_PATH = backstage['metadata']['annotations']['playbook.io.nrs.gov.bc.ca/jasperSourcePath']
+                    if (env.CATALOG_JASPER_PATH.contains("{{ playbook_dir }}")) {
+                      env.CATALOG_JASPER_PATH = env.CATALOG_JASPER_PATH.replaceAll("{{ playbook_dir }}", env.CATALOG_PLAYBOOK_PATH)
+                    }
+                    echo "Will run: git sparse-checkout set .jenkins "${env.CATALOG_PLAYBOOK_PATH}" "${env.CATALOG_JASPER_PATH}"
                 }
             }
         }
@@ -80,9 +85,7 @@ pipeline {
                 script {
                     sh '''
                         cd app
-                        PLAYBOOKS_PATH="playbooks"
-                        JASPER_PATH="jasper-server"
-                        git sparse-checkout set .jenkins "$PLAYBOOKS_PATH" "$JASPER_PATH"
+                        git sparse-checkout set .jenkins "$CATALOG_PLAYBOOKS_PATH" "$CATALOG_JASPER_PATH"
                     '''
                 }
             }
