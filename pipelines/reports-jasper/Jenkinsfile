@@ -27,14 +27,14 @@ pipeline {
                     echo ""
                     echo "Standard Jasper report deployment pipeline"
                     echo ""
-                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/jasper-reports"
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/reports-jasper"
                     echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
                     echo ""
                     echo "Developers are expected to review the documentation of all roles used by their Ansible playbook file."
                 }
             }
         }
-        stage('Checkout app') {
+        stage('Sparse checkout jasper app') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
@@ -50,11 +50,33 @@ pipeline {
                         env.GITHUB_USER = "${params.githubUser}"
                         env.GITHUB_TOKEN = "${params.githubToken}"
                         wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh 'git clone --branch ${GIT_BRANCH} https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app'
+                            sh '''
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                cd app
+                                git sparse-checkout init --cone
+                                git checkout ${GIT_BRANCH}
+                            '''
                         }
                     } else {
-                        sh 'git clone --branch ${GIT_BRANCH} https://${GIT_REPO} app'
+                        sh '''
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout init --cone
+                            git checkout ${GIT_BRANCH}
+                        '''
                     }
+                    def backstage = readYaml (file: 'app/catalog-info.yaml')
+                    env.CATALOG_PLAYBOOK_PATH = backstage['metadata']['annotations']['playbook.io.nrs.gov.bc.ca/playbookPath']
+                    env.CATALOG_JASPER_PATH = backstage['metadata']['annotations']['playbook.io.nrs.gov.bc.ca/jasperSourcePath']
+                    if (env.CATALOG_JASPER_PATH.contains("{{ playbook_dir }}")) {
+                      env.CATALOG_JASPER_PATH = env.CATALOG_JASPER_PATH.replaceAll("\\{\\{ playbook_dir \\}\\}", env.CATALOG_PLAYBOOK_PATH)
+                    }
+                    sh '''
+                        cd app
+                        git sparse-checkout set .jenkins "$CATALOG_PLAYBOOK_PATH" "$CATALOG_JASPER_PATH/jasper-server"
+                    '''
                 }
             }
         }
