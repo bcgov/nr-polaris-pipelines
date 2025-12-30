@@ -57,8 +57,13 @@ pipeline {
             steps {
                 script {
                     env.CAUSE_USER_ID = JenkinsUtil.getCauseUserId(currentBuild)
+                    env.CURRENT_DIR = sh(
+                        returnStdout: true,
+                        script: 'pwd'
+                    ).trim()
                 }
                 sh "mkdir -p ${TMP_VOLUME} && chmod 775 ${TMP_VOLUME}"
+                echo "Current directory: ${CURRENT_DIR}"
             }
         }
         stage('Get github token') {
@@ -365,6 +370,20 @@ pipeline {
                     cleanWhenUnstable: false,
                     deleteDirs: true
                 )
+                script {
+                    if (TMP_VOLUME.startsWith('liquibase.')) {
+                        echo "Delete temporary directory: ${TMP_VOLUME}"
+                        sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
+                    } else {
+                        echo "Skipping deletion of temporary directory: ${TMP_VOLUME}"
+                    }
+                    if (TMP_OUTPUT_FILE.startsWith('liquibase.stderr.')) {
+                        echo "Delete temporary output file: ${TMP_OUTPUT_FILE}"
+                        sh "rm -f '${CURRENT_DIR}/${TMP_OUTPUT_FILE}'"
+                    } else {
+                        echo "Skipping deletion of temporary output file: ${TMP_OUTPUT_FILE}"
+                    }
+                }
             }
         }
     }
