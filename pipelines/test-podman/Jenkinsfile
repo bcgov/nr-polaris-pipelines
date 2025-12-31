@@ -1,0 +1,119 @@
+@Library('polaris@v2.0.0')
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.Vault
+
+def intention
+def podman
+
+pipeline {
+    agent {
+        label "${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}"
+    }
+    environment {
+        NR_BROKER_TOKEN = credentials('nr-oscar-jwt')
+        AUTHFILE = "auth.json"
+    }
+    stages {
+        stage('Setup for scheduled job') {
+            when {
+                triggeredBy 'TimerTrigger' // matches class name suffix
+            }
+            steps {
+                script {
+                    env.CAUSE_USER_ID = 'jenkins-polaris@internal'
+                }
+            }
+        }
+        stage('Setup for manual job') {
+            when {
+                not {
+                triggeredBy 'TimerTrigger'
+                }
+            }
+            steps {
+                script {
+                    env.CAUSE_USER_ID = JenkinsUtil.getCauseUserId(currentBuild)
+                }
+            }
+        }
+        stage('Test Podman') {
+            steps {
+                script {
+                    // open intention to get artifactory creds
+                    intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-test-podman.json'))
+                    intention.setEventDetails(
+                        userName: env.CAUSE_USER_ID,
+                        provider: env.EVENT_PROVIDER,
+                        url: env.BUILD_URL
+                    )
+                    intention.open()
+                    intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login")
+                    def vault = new Vault(vaultToken)
+                    vault.readToObject("apps/data/tools/oscar/test-podman", env, keyTransform: { key -> key.toUpperCase() })
+                    env.REGISTRY_USERNAME = env.ARTIFACTORY_USERNAME
+                    env.REGISTRY_PASSWORD = env.ARTIFACTORY_PASSWORD
+                    podman = new Podman(this)
+                    podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    podman.run("hello-world",
+                        authfile: "${env.AUTHFILE}",
+                        options: "--rm",
+                        returnStatus: true
+                    )
+                    intention.endAction("login")
+                }
+            }
+        }
+    }
+    post {
+        success {
+            node("${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}") {
+                script {
+                    if (intention) {
+                        println intention.close(true)
+                    }
+                }
+            }
+        }
+        unstable {
+            node("${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}") {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        failure {
+            node("${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}") {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        aborted {
+            node("${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}") {
+                script {
+                    if (intention) {
+                        println intention.close(true)
+                    }
+                }
+            }
+        }
+        always {
+            node("${params.AGENT_LABEL ?: Podman.AGENT_LABEL_APP}") {
+                cleanWs(
+                    cleanWhenAborted: true,
+                    cleanWhenFailure: false,
+                    cleanWhenSuccess: true,
+                    cleanWhenUnstable: false,
+                    deleteDirs: true
+                )
+            }
+        }
+    }
+}
