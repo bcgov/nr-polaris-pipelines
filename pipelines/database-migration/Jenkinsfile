@@ -32,7 +32,6 @@ pipeline {
         PODMAN_REGISTRY = "docker.io"
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template"
         CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase"
-        HOST = "freight.bcgov"
         PODMAN_USER = "wwwadm"
         NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-prod-role-id')
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
@@ -167,6 +166,8 @@ pipeline {
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     env.APP_VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
+                    sh "cp scripts/config.hcl ${TMP_VOLUME}/config.hcl"
+                    sh "chmod -R 775 ${TMP_VOLUME}"
                     podman = new Podman(this, null)
                     podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.APP_VAULT_TOKEN, password: APP_VAULT_TOKEN]]]) {
@@ -176,7 +177,6 @@ pipeline {
                                 --security-opt label=disable \
                                 --userns keep-id \
                                 -v \$(pwd)/${TMP_VOLUME}:${PODMAN_WORKDIR} \
-                                -v \$(pwd)/scripts/config.hcl:${PODMAN_WORKDIR}/config.hcl \
                                 -e TARGET_ENV_SHORT=${env_short} \
                                 -e PODMAN_WORKDIR=${PODMAN_WORKDIR} \
                                 -e VAULT_TOKEN=${APP_VAULT_TOKEN}",
