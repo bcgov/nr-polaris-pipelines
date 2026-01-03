@@ -1,0 +1,23 @@
+{
+  "event": {
+    "provider": "",
+    "reason": "Test podman",
+    "transient": true,
+    "url": ""
+  },
+  "actions": [
+    {
+      "action": "server-access",
+      "id": "login",
+      "provision": ["token/self"],
+      "service": {
+        "name": "test-podman",
+        "project": "oscar",
+        "environment": "tools"
+      }
+    }
+  ],
+  "user": {
+    "name": ""
+  }
+}
