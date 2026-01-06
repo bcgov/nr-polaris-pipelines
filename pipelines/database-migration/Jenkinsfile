@@ -13,7 +13,6 @@ pipeline {
         label Podman.AGENT_LABEL_APP
     }
     environment {
-        PATH = "/sw_ux/bin:$PATH"
         TARGET_ENV = "${params.environment}"
         GH_REPO = "${params.githubRepo}"
         OWNER = GH_REPO.substring(0, GH_REPO.lastIndexOf("/"))
