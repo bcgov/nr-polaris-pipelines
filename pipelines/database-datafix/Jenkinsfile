@@ -32,7 +32,7 @@ pipeline {
         EVENT_PROVIDER = "${params.eventProvider}"
         PODMAN_REGISTRY = "docker.io"
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template"
-        CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase"
+        CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.33.0"
         PODMAN_USER = "wwwadm"
         NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-prod-role-id')
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
