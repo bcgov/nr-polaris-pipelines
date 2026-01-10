@@ -224,16 +224,6 @@ pipeline {
                 }
             }
         }
-        stage('Post-migration') {
-            when { expression { return params.dryRun == false } }
-            steps {
-                script {
-                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/post-migration.sh"
-                    intention.endAction("database")
-                    podman.logout(authfile: "${TMP_VOLUME}/${AUTHFILE}")
-                }
-            }
-        }
         stage('Podman logout') {
             steps {
                 script {
