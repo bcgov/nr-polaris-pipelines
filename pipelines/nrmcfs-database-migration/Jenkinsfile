@@ -136,6 +136,7 @@ pipeline {
         stage('Generate Liquibase properties') {
             steps {
                 script {
+                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-database.json'))
                     intention.setEventDetails(
                         userName: env.DEPLOYMENT_APPROVER,
@@ -143,6 +144,8 @@ pipeline {
                         url: env.BUILD_URL,
                         serviceName: env.COMPONENT,
                         serviceProject: env.PROJECT,
+                        triggerId: triggerId,
+                        triggerUrl: env.TRIGGER_URL,
                         environment: env.TARGET_ENV_LONG
                     )
                     intention.open()
