@@ -138,7 +138,7 @@ pipeline {
                 script {
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-database.json'))
                     intention.setEventDetails(
-                        userName: env.CAUSE_USER_ID,
+                        userName: env.DEPLOYMENT_APPROVER,
                         provider: env.EVENT_PROVIDER,
                         url: env.BUILD_URL,
                         serviceName: env.COMPONENT,
