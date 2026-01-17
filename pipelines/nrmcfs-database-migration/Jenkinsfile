@@ -18,6 +18,8 @@ pipeline {
         GH_OWNER = "${params.githubOwner}"
         GH_REPO = "${params.githubRepo}"
         GITHUB_TAG = "${params.githubTag}"
+        GITHUB_RUNID= "${params.githubRunId}"
+        TRIGGER_URL = "${params.triggerUrl}"
         TARGET_ENV_LONG = "${params.envLong}"
         LIQUIBASE_FRAMEWORK_DIR = "nrmcfs-liquibase-framework"
         LIQUIBASE_FRAMEWORK_BRANCH = "${params.liquibaseFrameworkBranch != null && params.liquibaseFrameworkBranch != "" ? params.liquibaseFrameworkBranch : "main"}"
