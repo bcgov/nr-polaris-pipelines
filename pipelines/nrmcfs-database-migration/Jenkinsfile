@@ -79,10 +79,10 @@ pipeline {
         stage('Verify GitHub tag exists') {
             steps {
                 script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GH_TOKEN, password: GH_TOKEN]]]) {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
                         def tagExists = sh(
                             returnStatus: true,
-                            script: "GH_TOKEN=${GH_TOKEN} gh api repos/${GH_OWNER}/${GH_REPO}/git/refs/tags/${GITHUB_TAG} > /dev/null 2>&1"
+                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/git/refs/tags/${GITHUB_TAG} > /dev/null 2>&1'
                         )
                         if (tagExists != 0) {
                             error("GitHub tag '${GITHUB_TAG}' does not exist in repository ${GH_OWNER}/${GH_REPO}")
@@ -95,8 +95,8 @@ pipeline {
         stage('Checkout repository') {
             steps {
                 script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GH_TOKEN, password: GH_TOKEN]]]) {
-                        sh "GH_TOKEN=${GH_TOKEN} gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}"
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        sh 'gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}'
                     }
                 }
             }
