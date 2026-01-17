@@ -33,6 +33,7 @@ pipeline {
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
         DB_ROLE_ID = credentials("knox-${params.project}-${params.component}-${env_short}-role-id")
         AUTHFILE = "auth.json"
+        DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
     }
     stages {
         stage('Banner') {
@@ -58,7 +59,6 @@ pipeline {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.githubTag} - ${params.envLong}"
                     env.DRY_RUN = params.dryRun == true ? 'true' : 'false'
-                    env.CAUSE_USER_ID = JenkinsUtil.getCauseUserId(currentBuild)
                     env.CURRENT_DIR = sh(
                         returnStdout: true,
                         script: 'pwd'
@@ -79,7 +79,7 @@ pipeline {
                     // open intention to get github app creds
                     intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: "scripts/intention-github-app.json"))
                     intention.setEventDetails(
-                        userName: env.CAUSE_USER_ID,
+                        userName: env.DEPLOYMENT_APPROVER,
                         provider: env.EVENT_PROVIDER,
                         url: env.BUILD_URL,
                         serviceName: env.COMPONENT,
