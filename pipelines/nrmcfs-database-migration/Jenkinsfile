@@ -79,7 +79,7 @@ pipeline {
                     // open intention to get github app creds
                     intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: "scripts/intention-github-app.json"))
                     intention.setEventDetails(
-                        userName: env.DEPLOYMENT_APPROVER,
+                        userName: "${env.DEPLOYMENT_APPROVER}",
                         provider: env.EVENT_PROVIDER,
                         url: env.BUILD_URL,
                         serviceName: env.COMPONENT,
