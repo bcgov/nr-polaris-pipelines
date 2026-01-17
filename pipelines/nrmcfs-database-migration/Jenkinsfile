@@ -152,8 +152,8 @@ pipeline {
         stage('Checkout NRMCFS Liquibase framework') {
             steps {
                 script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GH_TOKEN, password: GH_TOKEN]]]) {
-                        sh "GH_TOKEN=${GH_TOKEN} gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${LIQUIBASE_FRAMEWORK_PATH} -- --branch=${LIQUIBASE_FRAMEWORK_BRANCH}"
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        sh 'gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${LIQUIBASE_FRAMEWORK_PATH} -- --branch=${LIQUIBASE_FRAMEWORK_BRANCH}'
                     }
                 }
             }
