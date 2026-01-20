@@ -325,63 +325,53 @@ pipeline {
     }
     post {
         success {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(true)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(true)
                 }
             }
         }
         unstable {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(false)
                 }
             }
         }
         failure {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(false)
                 }
             }
         }
         aborted {
-            node(Podman.AGENT_LABEL_APP) {
-                script {
-                    if (intention) {
-                        println intention.close(false)
-                    }
+            script {
+                if (intention) {
+                    println intention.close(false)
                 }
             }
         }
         always {
-            node(Podman.AGENT_LABEL_APP) {
-                cleanWs(
-                    cleanWhenAborted: true,
-                    cleanWhenFailure: false,
-                    cleanWhenSuccess: true,
-                    cleanWhenUnstable: false,
-                    deleteDirs: true
-                )
-                script {
-                    if (TMP_VOLUME.startsWith('liquibase.')) {
-                        echo "Delete temporary directory: ${TMP_VOLUME}"
-                        sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
-                    } else {
-                        echo "Skipping deletion of temporary directory: ${TMP_VOLUME}"
-                    }
-                    if (TMP_OUTPUT_FILE.startsWith('liquibase.stderr.')) {
-                        echo "Delete temporary output file: ${TMP_OUTPUT_FILE}"
-                        sh "rm -f '${CURRENT_DIR}/${TMP_OUTPUT_FILE}'"
-                    } else {
-                        echo "Skipping deletion of temporary output file: ${TMP_OUTPUT_FILE}"
-                    }
+            cleanWs(
+                cleanWhenAborted: true,
+                cleanWhenFailure: false,
+                cleanWhenSuccess: true,
+                cleanWhenUnstable: false,
+                deleteDirs: true
+            )
+            script {
+                if (TMP_VOLUME.startsWith('liquibase.')) {
+                    echo "Delete temporary directory: ${TMP_VOLUME}"
+                    sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
+                } else {
+                    echo "Skipping deletion of temporary directory: ${TMP_VOLUME}"
+                }
+                if (TMP_OUTPUT_FILE.startsWith('liquibase.stderr.')) {
+                    echo "Delete temporary output file: ${TMP_OUTPUT_FILE}"
+                    sh "rm -f '${CURRENT_DIR}/${TMP_OUTPUT_FILE}'"
+                } else {
+                    echo "Skipping deletion of temporary output file: ${TMP_OUTPUT_FILE}"
                 }
             }
         }
