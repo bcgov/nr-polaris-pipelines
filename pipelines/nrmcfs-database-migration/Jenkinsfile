@@ -179,6 +179,13 @@ pipeline {
                 }
             }
         }
+        stage('Post-migration') {
+            steps {
+                script {
+                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/post-migration.sh"
+                }
+            }
+        }
         stage('Podman logout') {
             steps {
                 script {
