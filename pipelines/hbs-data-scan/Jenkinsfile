@@ -19,8 +19,9 @@ pipeline {
         GH_REPO = "${params.githubRepo}"
         GITHUB_TAG = "${params.githubTag}"
         TARGET_ENV_LONG = "${params.envLong}"
-        LIQUIBASE_HOME_DIR =  "/liquibase/changelog"
-        TMP_VOLUME = "tmp.${UUID.randomUUID().toString()[0..7]}"
+        TARGET_ENV_SHORT = "${env_short}"
+        DATASCAN_HOME_DIR =  "/app"
+        TMP_VOLUME = "datascan.${UUID.randomUUID().toString()[0..7]}"
         EVENT_PROVIDER = "${params.eventProvider}"
         PODMAN_REGISTRY = "docker.io"
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
@@ -121,14 +122,14 @@ pipeline {
                         // Try to fetch GitHub release to verify consistency
                         def releaseCheckStatus = sh(
                             returnStatus: true,
-                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/releases/tags/${GITHUB_TAG} > /tmp/release-${BUILD_NUMBER}.json 2>&1'
+                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/releases/tags/${GITHUB_TAG} > ${TMP_VOLUME}/release-${BUILD_NUMBER}.json 2>&1'
                         )
 
                         if (releaseCheckStatus == 0) {
                             // GitHub release exists - verify it matches tag name convention
                             def releaseJson = sh(
                                 returnStdout: true,
-                                script: 'cat /tmp/release-${BUILD_NUMBER}.json'
+                                script: 'cat ${TMP_VOLUME}/release-${BUILD_NUMBER}.json'
                             )
                             def release = readJSON(text: releaseJson)
                             def isPrereleaseByGithub = release.prerelease
@@ -146,22 +147,17 @@ pipeline {
                             echo "⚠ Warning: No GitHub release found for tag '${GITHUB_TAG}' - validating based on tag name only"
                         }
 
-                        // Cleanup temp file
-                        sh 'rm -f /tmp/release-${BUILD_NUMBER}.json'
-
                         // Check if tag matches environment requirements
-                        if (env.TARGET_ENV_LONG == 'production') {
-                            if (isPrereleaseByName) {
-                                error("Cannot deploy pre-release tag '${GITHUB_TAG}' to production. Only release tags (without dashes) are allowed.")
-                            }
-                            echo "✓ Verified: '${GITHUB_TAG}' is a release tag (allowed for production)"
-                        } else if (env.TARGET_ENV_LONG in ['development', 'test']) {
-                            if (!isPrereleaseByName) {
-                                error("Cannot deploy release tag '${GITHUB_TAG}' to ${TARGET_ENV_LONG}. Only pre-release tags (with dashes) are allowed.")
-                            }
+                        // Rule: Pre-release tags (with dash) cannot go to production
+                        //       Release tags (without dash) can go to any environment
+                        if (env.TARGET_ENV_LONG == 'production' && isPrereleaseByName) {
+                            error("Cannot deploy pre-release tag '${GITHUB_TAG}' to production. Only release tags (without dashes) are allowed.")
+                        }
+
+                        if (isPrereleaseByName) {
                             echo "✓ Verified: '${GITHUB_TAG}' is a pre-release tag (allowed for ${TARGET_ENV_LONG})"
                         } else {
-                            echo "⚠ Warning: Unknown environment '${TARGET_ENV_LONG}', skipping release type validation"
+                            echo "✓ Verified: '${GITHUB_TAG}' is a release tag (allowed for any environment)"
                         }
                     }
                 }
@@ -176,19 +172,16 @@ pipeline {
                 }
             }
         }
-        stage('Generate Liquibase properties') {
+        stage('Generate Python environment') {
             steps {
                 script {
-                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
                     intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database.json'))
                     intention.setEventDetails(
-                        userName: env.DEPLOYMENT_APPROVER,
+                        userName: env.CAUSE_USER_ID
                         provider: env.EVENT_PROVIDER,
                         url: env.BUILD_URL,
                         serviceName: env.COMPONENT,
                         serviceProject: env.PROJECT,
-                        triggerId: triggerId,
-                        triggerUrl: env.TRIGGER_URL,
                         environment: env.TARGET_ENV_LONG
                     )
                     intention.open()
@@ -199,24 +192,25 @@ pipeline {
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     intention.startAction("database")
-                    env.DATABASE_VAULT_TOKEN = intention.provisionToken("database")
+                    env.DATASCAN_VAULT_TOKEN = intention.provisionToken("database")
+                    // Generate a new vault.hcl file for the target environment
+                    sh '''
+                    mkdir -p ${TMP_VOLUME}/env
+                    echo "Generating vault.hcl for environment: $TARGET_ENV_SHORT"
+                    sed "s/{{TARGET_ENV_SHORT}}/$TARGET_ENV_SHORT/g" ${TMP_VOLUME}/vault.hcl.tpl > ${TMP_VOLUME}/env/vault.hcl
+                    '''
                     podman = new Podman(this, null)
                     podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.DATABASE_VAULT_TOKEN, password: DATABASE_VAULT_TOKEN]]]) {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'DATASCAN_VAULT_TOKEN', password: env.DATASCAN_VAULT_TOKEN]]]) {
                         podman.run("${CONTAINER_IMAGE_CONSUL_TEMPLATE}",
                             authfile: "${TMP_VOLUME}/${AUTHFILE}",
                             options: "--rm \
                                 --security-opt label=disable \
                                 --userns keep-id \
-                                -v \$(pwd)/${TMP_VOLUME}:${LIQUIBASE_HOME_DIR} \
-                                -v \$(pwd)/scripts/config.hcl:${LIQUIBASE_HOME_DIR}/config.hcl \
-                                -e TARGET_ENV_SHORT=${env_short} \
-                                -e LIQUIBASE_SEARCH_PATH=${LIQUIBASE_SEARCH_PATH} \
-                                -e PODMAN_WORKDIR=${LIQUIBASE_HOME_DIR} \
-                                -e VAULT_TOKEN=${DATABASE_VAULT_TOKEN}",
-                            command: "-config '/liquibase/changelog/config.hcl' \
-                                -template '/liquibase/changelog/liquibase.properties.tpl:${LIQUIBASE_HOME_DIR}/liquibase.properties' \
-                                -once",
+                                -v \$(pwd)/${TMP_VOLUME}:${DATASCAN_HOME_DIR} \
+                                -e TARGET_ENV_SHORT=${TARGET_ENV_SHORT} \
+                                -e VAULT_TOKEN=${DATASCAN_VAULT_TOKEN}",
+                            command: "-config=env/vault.hcl -once",
                             returnStatus: true
                         )
                     }
@@ -224,40 +218,18 @@ pipeline {
                 }
             }
         }
-        stage('Checkout NRMCFS Liquibase framework') {
+        stage('Get row count') {
             steps {
                 script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        sh 'gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${LIQUIBASE_FRAMEWORK_PATH} -- --branch=${LIQUIBASE_FRAMEWORK_BRANCH}'
-                    }
-                }
-            }
-        }
-        stage('Get status') {
-            steps {
-                script {
-                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/status.sh"
-                }
-            }
-        }
-        stage('Pre-migration') {
-            steps {
-                script {
-                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/pre-migration.sh"
-                }
-            }
-        }
-        stage('Update database') {
-            steps {
-                script {
-                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/update.sh"
-                }
-            }
-        }
-        stage('Post-migration') {
-            steps {
-                script {
-                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/post-migration.sh"
+                    intention.startAction("database")
+                    podman.run("${CONTAINER_IMAGE_LIQUBASE}",
+                        authfile: "${TMP_VOLUME}/${AUTHFILE}",
+                        options: "--rm \
+                            --security-opt label=disable \
+                            --userns keep-id \
+                            -v \$(pwd)/${TMP_VOLUME}:${DATASCAN_HOME_DIR}",
+                        command: "--env ${TARGET_ENV_SHORT}"
+                    )
                 }
             }
         }
@@ -308,7 +280,7 @@ pipeline {
                 deleteDirs: true
             )
             script {
-                if (TMP_VOLUME.startsWith('liquibase.')) {
+                if (TMP_VOLUME.startsWith('datascan.')) {
                     echo "Delete temporary directory: ${TMP_VOLUME}"
                     sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
                 } else {
