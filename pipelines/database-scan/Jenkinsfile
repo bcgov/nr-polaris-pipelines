@@ -1,0 +1,368 @@
+@Library('polaris')
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.Vault
+
+def env_short = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+def intention
+def podman
+// Exit codes: 0=no anomalies, 20=anomalies found, 99=error
+// Make this configurable for reusability with other scan containers
+def SCAN_EXIT_CODE_SUCCESS = 0
+def SCAN_EXIT_CODE_ANOMALIES = 20
+def SCAN_EXIT_CODE_ERROR = 99
+
+pipeline {
+    agent {
+        label Podman.AGENT_LABEL_APP
+    }
+    environment {
+        PROJECT = "${params.project}"
+        COMPONENT = "${params.component}"
+        GITHUB_OWNER = "${params.githubOwner}"
+        GITHUB_REPO = "${params.githubRepo}"
+        GITHUB_TAG = "${params.githubTag}"
+        CONTAINER_IMAGE = "${params.containerImage}"
+        TARGET_ENV_LONG = "${params.envLong}"
+        TARGET_ENV_SHORT = "${env_short}"
+        TMP_VOLUME = "data-scan.${UUID.randomUUID().toString()[0..7]}"
+        SCHEDULED_DATA_SCAN_USER_ID = "${params.scheduledDataScanUserId}"
+        EVENT_PROVIDER = "${params.eventProvider}"
+        PODMAN_REGISTRY = "docker.io"
+        CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
+        PODMAN_USER = "wwwadm"
+        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
+        NR_BROKER_TOKEN = credentials('nr-broker-jwt')
+        DB_ROLE_ID = credentials("knox-${params.project}-${params.component}-${env_short}-role-id")
+        AUTHFILE = "auth.json"
+        NOTIFICATION_RECIPIENTS = "${params.notificationRecipients}"
+    }
+    stages {
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "Data scan pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/database-scan/Jenkinsfile"
+                }
+            }
+        }
+        stage('Setup') {
+            steps {
+                script {
+                    // Validate required parameters
+                    if (!env.GITHUB_TAG || env.GITHUB_TAG.trim().isEmpty()) {
+                        error("GITHUB_TAG parameter is required. Provide a Git tag to deploy (e.g., v1.2.3)")
+                    }
+                    // Set the build display name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.githubTag} - ${params.envLong}"
+                    env.CAUSE_USER_ID = """${env.SCHEDULED_DATA_SCAN_USER_ID ? env.SCHEDULED_DATA_SCAN_USER_ID :
+                        JenkinsUtil.getCauseUserId(currentBuild)}"""
+                    env.CURRENT_DIR = sh(
+                        returnStdout: true,
+                        script: 'pwd'
+                    ).trim()
+                }
+                sh "mkdir -p ${env.TMP_VOLUME} && chmod 775 ${env.TMP_VOLUME}"
+                echo "Current directory: ${CURRENT_DIR}"
+                echo "Temporary volume: ${TMP_VOLUME}"
+                echo "GitHub tag: ${GITHUB_TAG}"
+            }
+        }
+        stage('Get github token') {
+            steps {
+                script {
+                    // open intention to get github app creds
+                    intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-github-app-transient.json'))
+                    intention.setEventDetails(
+                        userName: env.CAUSE_USER_ID,
+                        provider: env.EVENT_PROVIDER,
+                        url: env.BUILD_URL,
+                        serviceName: env.COMPONENT,
+                        serviceProject: env.PROJECT,
+                        environment: "tools"
+                    )
+                    intention.open()
+                    intention.startAction("data-scan")
+                    def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
+                    def vaultGhApp = new Vault(vaultGhToken)
+                    def ghAppCreds = vaultGhApp.read("apps/data/tools/db-pipeline/nr-database-migration/github_app")
+                    env.APP_ID = ghAppCreds['gh_app_id']
+                    env.INSTALLATION_ID = ghAppCreds['gh_installation_id']
+                    env.PRIVATE_KEY = ghAppCreds['gh_private_key']
+                    // generate github app jwt
+                    env.GENERATED_JWT = sh(
+                        returnStdout: true,
+                        script: 'set +x ; scripts/generate_jwt.sh'
+                    ).trim()
+                    env.GH_TOKEN = sh(
+                        returnStdout: true,
+                        script: 'set +x ; scripts/get_installation_token.sh'
+                    ).trim()
+                    intention.endAction("data-scan")
+                    intention.close(true)
+                }
+            }
+        }
+        stage('Verify GitHub release tag') {
+            steps {
+                script {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        // Verify tag exists
+                        def tagExists = sh(
+                            returnStatus: true,
+                            script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} > /dev/null 2>&1"
+                        )
+                        if (tagExists != 0) {
+                            echo "DEBUG: Tag check failed, trying to get more info..."
+                            sh "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} || true"
+                            error("GitHub tag '${env.GITHUB_TAG}' does not exist in repository ${env.GITHUB_OWNER}/${env.GITHUB_REPO}")
+                        }
+
+                        // Determine if pre-release based on tag name (Maven convention: anything with a dash is pre-release)
+                        def tagVersion = env.GITHUB_TAG.replaceFirst(/^v/, '')  // Remove 'v' prefix if present
+                        def isPrereleaseByName = tagVersion.contains('-')
+
+                        // Try to fetch GitHub release to verify consistency
+                        def releaseJson = null
+                        try {
+                            releaseJson = sh(
+                                returnStdout: true,
+                                script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/releases/tags/${env.GITHUB_TAG}"
+                            ).trim()
+                        } catch (Exception e) {
+                            // No GitHub release exists - will handle below
+                        }
+
+                        if (releaseJson) {
+                            // GitHub release exists - verify it matches tag name convention
+                            def release = readJSON(text: releaseJson)
+                            def isPrereleaseByGithub = release.prerelease
+
+                            // Check for mismatch between tag name and GitHub release property
+                            if (isPrereleaseByName != isPrereleaseByGithub) {
+                                error("Inconsistent release configuration for tag '${env.GITHUB_TAG}':\n" +
+                                      "  Tag name indicates: ${isPrereleaseByName ? 'pre-release (contains dash)' : 'release (no dash)'}\n" +
+                                      "  GitHub release marked as: ${isPrereleaseByGithub ? 'pre-release' : 'release'}\n" +
+                                      "Please ensure tag naming and GitHub release settings are consistent.")
+                            }
+                            echo "✓ Verified: Tag name and GitHub release settings are consistent (${isPrereleaseByName ? 'pre-release' : 'release'})"
+                        } else {
+                            // No GitHub release exists - warn but continue based on tag name
+                            echo "⚠ Warning: No GitHub release found for tag '${env.GITHUB_TAG}' - validating based on tag name only"
+                        }
+
+                        // Check if tag matches environment requirements
+                        // Rule: Pre-release tags (with dash) cannot go to production
+                        //       Release tags (without dash) can go to any environment
+                        if (env.TARGET_ENV_LONG == 'production' && isPrereleaseByName) {
+                            error("Cannot deploy pre-release tag '${env.GITHUB_TAG}' to production. Only release tags (without dashes) are allowed.")
+                        }
+
+                        if (isPrereleaseByName) {
+                            echo "✓ Verified: '${env.GITHUB_TAG}' is a pre-release tag (allowed for ${env.TARGET_ENV_LONG})"
+                        } else {
+                            echo "✓ Verified: '${env.GITHUB_TAG}' is a release tag (allowed for any environment)"
+                        }
+                    }
+                }
+            }
+        }
+        stage('Checkout repository') {
+            steps {
+                script {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        sh "gh repo clone ${env.GITHUB_OWNER}/${env.GITHUB_REPO} ${env.TMP_VOLUME} -- --branch=${env.GITHUB_TAG}"
+                    }
+                }
+            }
+        }
+        stage('Generate Python environment') {
+            steps {
+                script {
+                    // open intention to get registry and db creds
+                    intention = new BrokerIntention(env.NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database.json'))
+                    intention.setEventDetails(
+                        userName: env.CAUSE_USER_ID,
+                        provider: env.EVENT_PROVIDER,
+                        url: env.BUILD_URL,
+                        serviceName: env.COMPONENT,
+                        serviceProject: env.PROJECT,
+                        environment: env.TARGET_ENV_LONG
+                    )
+                    intention.open()
+                    intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login", env.NR_DATABASE_MIGRATION_ROLE_ID)
+                    def vault = new Vault(vaultToken)
+                    def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
+                    env.REGISTRY_USERNAME = registryCreds['sa_username']
+                    env.REGISTRY_PASSWORD = registryCreds['sa_password']
+                    env.APP_VAULT_TOKEN = intention.provisionToken("database", env.DB_ROLE_ID)
+                    sh "mkdir -p ${env.TMP_VOLUME}/env && chmod 775 ${env.TMP_VOLUME}/env"
+                    // Generate a new vault.hcl file for the target environment
+                    sh "echo Generating vault.hcl for environment: ${env.TARGET_ENV_SHORT}"
+                    sh "sed \"s/{{TARGET_ENV_SHORT}}/${env.TARGET_ENV_SHORT}/g\" ${env.TMP_VOLUME}/vault.hcl.tpl > ${env.TMP_VOLUME}/env/vault.hcl"
+                    podman = new Podman(this, null)
+                    podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.APP_VAULT_TOKEN, password: env.APP_VAULT_TOKEN]]]) {
+                        podman.run("${env.CONTAINER_IMAGE_CONSUL_TEMPLATE}",
+                            authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}",
+                            options: "--rm \
+                                --security-opt label=disable \
+                                --userns keep-id \
+                                --user \$(id -u):\$(id -g) \
+                                -v \$(pwd)/${env.TMP_VOLUME}:/consul-template \
+                                -w /consul-template \
+                                -e TARGET_ENV_SHORT=${env.TARGET_ENV_SHORT} \
+                                -e VAULT_TOKEN=${env.APP_VAULT_TOKEN}",
+                            command: "-config=/consul-template/env/vault.hcl -once",
+                            returnStatus: true
+                        )
+                    }
+                    intention.endAction("login")
+                }
+            }
+        }
+        stage('Scan for anomalies') {
+            steps {
+                script {
+                    podman = new Podman(this, null, env.AUTHFILE, "artifacts.developer.gov.bc.ca/cc20-gen-docker-local")
+                    podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    // Capture both output and exit code
+                    def scanResult = sh(
+                        returnStdout: true,
+                        script: """
+                            set +e
+                            OUTPUT=\$(podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
+                                -v \$(pwd)/${env.TMP_VOLUME}:/app \
+                                artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE} \
+                                --env ${env.TARGET_ENV_SHORT} --row-count-only)
+                            EXIT_CODE=\$?
+                            echo "\${OUTPUT}"
+                            echo "EXIT_CODE=\${EXIT_CODE}"
+                        """
+                    ).trim()
+
+                    // Parse output and exit code
+                    def lines = scanResult.split('\n')
+                    def exitCodeLine = lines.find { it.startsWith('EXIT_CODE=') }
+                    def exitCode = exitCodeLine ? exitCodeLine.replace('EXIT_CODE=', '').toInteger() : -1
+                    env.rowCountOutput = lines.findAll { !it.startsWith('EXIT_CODE=') }.join('\n').trim()
+
+                    echo "Anomaly row count: ${env.rowCountOutput}"
+                    echo "Container exit code: ${exitCode}"
+
+                    // Validate exit code
+                    if (exitCode == SCAN_EXIT_CODE_SUCCESS || exitCode == SCAN_EXIT_CODE_ANOMALIES) {
+                        echo "✓ Scan completed successfully (exit code ${exitCode})"
+                    } else if (exitCode == SCAN_EXIT_CODE_ERROR) {
+                        error("Scan failed with error exit code ${exitCode}")
+                    } else {
+                        error("Scan failed with unexpected exit code ${exitCode}")
+                    }
+                }
+            }
+        }
+        stage('Display anomaly results') {
+            when { expression { env.rowCountOutput?.toInteger() > 0 } }
+            steps {
+                script {
+                    // Display results and validate exit code
+                    def exitCode = sh(
+                        returnStatus: true,
+                        script: """
+                            podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
+                                -v \$(pwd)/${env.TMP_VOLUME}:/app \
+                                artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE} \
+                                --env ${env.TARGET_ENV_SHORT}
+                        """
+                    )
+
+                    echo "Display results exit code: ${exitCode}"
+
+                    // Validate exit code
+                    if (exitCode == SCAN_EXIT_CODE_SUCCESS || exitCode == SCAN_EXIT_CODE_ANOMALIES) {
+                        echo "✓ Results displayed successfully (exit code ${exitCode})"
+                    } else if (exitCode == SCAN_EXIT_CODE_ERROR) {
+                        error("Display failed with error exit code ${exitCode}")
+                    } else {
+                        error("Display failed with unexpected exit code ${exitCode}")
+                    }
+
+                    // Send email notification about detected anomalies
+                    env.ANOMOLIES_MESSAGE = "Data scan detected ${env.rowCountOutput} anomalies in ${env.COMPONENT} (${env.TARGET_ENV_LONG})"
+                    sh """
+                        printf "\${BUILD_URL}\\n\\n\${ANOMOLIES_MESSAGE}" | mailx -s "Data quality issue detected" "${env.NOTIFICATION_RECIPIENTS}"
+                    """
+                    echo "✓ Email notification sent to ${env.NOTIFICATION_RECIPIENTS}"
+                }
+            }
+        }
+        stage('Podman logout') {
+            steps {
+                script {
+                    intention.endAction("database")
+                    podman.logout(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}")
+                }
+            }
+        }
+    }
+    post {
+        success {
+            script {
+                if (intention) {
+                    println intention.close(true)
+                }
+            }
+        }
+        unstable {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        failure {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+                // Send email notification about pipeline failure
+                env.FAILURE_MESSAGE = "Data scan pipeline failed for ${env.COMPONENT} (${env.TARGET_ENV_LONG})"
+                sh """
+                    printf "\${BUILD_URL}\\n\\n\${FAILURE_MESSAGE}" | mailx -s "Data scan pipeline failed" "${env.NOTIFICATION_RECIPIENTS}"
+                """
+                echo "✓ Failure notification sent to ${env.NOTIFICATION_RECIPIENTS}"
+            }
+        }
+        aborted {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        always {
+            cleanWs(
+                cleanWhenAborted: true,
+                cleanWhenFailure: false,
+                cleanWhenSuccess: true,
+                cleanWhenUnstable: false,
+                deleteDirs: true
+            )
+            script {
+                if (env.TMP_VOLUME.startsWith('data-scan.')) {
+                    echo "Delete temporary directory: ${env.TMP_VOLUME}"
+                    sh "rm --preserve-root -rf '${env.CURRENT_DIR}/${env.TMP_VOLUME}'"
+                } else {
+                    echo "Skipping deletion of temporary directory: ${env.TMP_VOLUME}"
+                }
+            }
+        }
+    }
+}

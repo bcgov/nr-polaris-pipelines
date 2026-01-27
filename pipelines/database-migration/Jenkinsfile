@@ -32,7 +32,7 @@ pipeline {
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template"
         CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.33.0"
         PODMAN_USER = "wwwadm"
-        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-prod-role-id')
+        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
         DB_ROLE_ID = credentials("knox-${params.serviceProject}-${params.serviceName}-${env_short}-role-id")
         AUTHFILE = "auth.json"
@@ -81,7 +81,7 @@ pipeline {
                     intention.startAction("login")
                     def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vaultGhApp = new Vault(vaultGhToken)
-                    def ghAppCreds = vaultGhApp.read("apps/data/prod/db-pipeline/nr-database-migration/github_app")
+                    def ghAppCreds = vaultGhApp.read("apps/data/tools/db-pipeline/nr-database-migration/github_app")
                     env.APP_ID = ghAppCreds['gh_app_id']
                     env.INSTALLATION_ID = ghAppCreds['gh_installation_id']
                     env.PRIVATE_KEY = ghAppCreds['gh_private_key']
@@ -161,7 +161,7 @@ pipeline {
                     intention.startAction("login")
                     def vaultToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vault = new Vault(vaultToken)
-                    def registryCreds = vault.read('apps/data/prod/db-pipeline/nr-database-migration/artifactory')
+                    def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     env.APP_VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
