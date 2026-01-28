@@ -60,6 +60,7 @@ pipeline {
                         script: 'pwd'
                     ).trim()
                 }
+                sh "mkdir -p ${TMP_VOLUME} && chmod 775 ${TMP_VOLUME}"
                 echo "Current directory: ${CURRENT_DIR}"
                 echo "Temporary volume: ${TMP_VOLUME}"
                 echo "GitHub tag: ${GITHUB_TAG}"
