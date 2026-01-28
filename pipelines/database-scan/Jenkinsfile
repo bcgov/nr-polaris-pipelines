@@ -110,7 +110,10 @@ pipeline {
                             returnStatus: true,
                             script: "gh api repos/\${GH_OWNER}/\${GH_REPO}/git/refs/tags/\${GITHUB_TAG} > /dev/null 2>&1"
                         )
+                        echo "DEBUG: Tag check exit code = ${tagExists}"
                         if (tagExists != 0) {
+                            echo "DEBUG: Tag check failed, trying to get more info..."
+                            sh "gh api repos/\${GH_OWNER}/\${GH_REPO}/git/refs/tags/\${GITHUB_TAG} || true"
                             error("GitHub tag '${GITHUB_TAG}' does not exist in repository ${GH_OWNER}/${GH_REPO}")
                         }
 
