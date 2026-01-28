@@ -108,7 +108,7 @@ pipeline {
                         // Verify tag exists
                         def tagExists = sh(
                             returnStatus: true,
-                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/git/refs/tags/${GITHUB_TAG} > /dev/null 2>&1'
+                            script: "gh api repos/\${GH_OWNER}/\${GH_REPO}/git/refs/tags/\${GITHUB_TAG} > /dev/null 2>&1"
                         )
                         if (tagExists != 0) {
                             error("GitHub tag '${GITHUB_TAG}' does not exist in repository ${GH_OWNER}/${GH_REPO}")
@@ -121,14 +121,14 @@ pipeline {
                         // Try to fetch GitHub release to verify consistency
                         def releaseCheckStatus = sh(
                             returnStatus: true,
-                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/releases/tags/${GITHUB_TAG} > ${TMP_VOLUME}/release-${BUILD_NUMBER}.json 2>&1'
+                            script: "gh api repos/\${GH_OWNER}/\${GH_REPO}/releases/tags/\${GITHUB_TAG} > \${TMP_VOLUME}/release-\${BUILD_NUMBER}.json 2>&1"
                         )
 
                         if (releaseCheckStatus == 0) {
                             // GitHub release exists - verify it matches tag name convention
                             def releaseJson = sh(
                                 returnStdout: true,
-                                script: 'cat ${TMP_VOLUME}/release-${BUILD_NUMBER}.json'
+                                script: "cat \${TMP_VOLUME}/release-\${BUILD_NUMBER}.json"
                             )
                             def release = readJSON(text: releaseJson)
                             def isPrereleaseByGithub = release.prerelease
@@ -166,7 +166,7 @@ pipeline {
             steps {
                 script {
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        sh 'gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}'
+                        sh "gh repo clone \${GH_OWNER}/\${GH_REPO} \${TMP_VOLUME} -- --branch=\${GITHUB_TAG}"
                     }
                 }
             }
