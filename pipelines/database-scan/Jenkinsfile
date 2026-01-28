@@ -168,9 +168,10 @@ pipeline {
         stage('Checkout repository') {
             steps {
                 script {
+                    echo "DEBUG: TMP_VOLUME = ${TMP_VOLUME}"
+                    sh "pwd && realpath ${TMP_VOLUME} 2>/dev/null || echo 'Directory does not exist yet'"
+                    sh "ls -la ${TMP_VOLUME} 2>/dev/null || echo 'Directory is empty or does not exist'"
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                    echo "DEBUG: About to clone into: ${TMP_VOLUME}"
-                    sh "pwd && ls -la ${TMP_VOLUME} 2>/dev/null || echo 'Directory does not exist yet'"
                         sh "gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}"
                     }
                 }
