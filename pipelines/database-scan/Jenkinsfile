@@ -20,12 +20,11 @@ pipeline {
         GITHUB_TAG = "${params.githubTag}"
         TARGET_ENV_LONG = "${params.envLong}"
         TARGET_ENV_SHORT = "${env_short}"
-        DATASCAN_HOME_DIR =  "/app"
-        TMP_VOLUME = "datascan.${UUID.randomUUID().toString()[0..7]}"
+        TMP_VOLUME = "database-scan.${UUID.randomUUID().toString()[0..7]}"
         EVENT_PROVIDER = "${params.eventProvider}"
         PODMAN_REGISTRY = "docker.io"
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
-        CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.21.1"
+        CONTAINER_IMAGE_DATASCAN = "bcgov-c/nr-hbs-daily-data-scan:main-7ddb6b4"
         PODMAN_USER = "wwwadm"
         NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-prod-role-id')
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
@@ -42,7 +41,7 @@ pipeline {
                     echo ""
                     echo "Data scan pipeline"
                     echo ""
-                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/database-datascan/Jenkinsfile"
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/database-scan/Jenkinsfile"
                 }
             }
         }
@@ -172,7 +171,7 @@ pipeline {
                 }
             }
         }
-        stage('Generate Python environment') {
+        stage('Scan database for anomalies') {
             steps {
                 script {
                     intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database.json'))
@@ -192,44 +191,20 @@ pipeline {
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     intention.startAction("database")
-                    env.DATASCAN_VAULT_TOKEN = intention.provisionToken("database")
-                    // Generate a new vault.hcl file for the target environment
-                    sh '''
-                    mkdir -p ${TMP_VOLUME}/env
-                    echo "Generating vault.hcl for environment: $TARGET_ENV_SHORT"
-                    sed "s/{{TARGET_ENV_SHORT}}/$TARGET_ENV_SHORT/g" ${TMP_VOLUME}/vault.hcl.tpl > ${TMP_VOLUME}/env/vault.hcl
-                    '''
-                    podman = new Podman(this, null)
-                    podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'DATASCAN_VAULT_TOKEN', password: env.DATASCAN_VAULT_TOKEN]]]) {
-                        podman.run("${CONTAINER_IMAGE_CONSUL_TEMPLATE}",
-                            authfile: "${TMP_VOLUME}/${AUTHFILE}",
-                            options: "--rm \
-                                --security-opt label=disable \
-                                --userns keep-id \
-                                -v \$(pwd)/${TMP_VOLUME}:${DATASCAN_HOME_DIR} \
-                                -e TARGET_ENV_SHORT=${TARGET_ENV_SHORT} \
-                                -e VAULT_TOKEN=${DATASCAN_VAULT_TOKEN}",
-                            command: "-config=env/vault.hcl -once",
-                            returnStatus: true
-                        )
-                    }
-                    intention.endAction("login")
+                    env.VAULT_TOKEN = intention.provisionToken("database")
+                    def rowCountOutput = sh(
+                        returnStdout: true,
+                        script: '${TMP_VOLUME}/run-database-scan.sh --env ${TARGET_ENV_SHORT} --row-count-only'
+                    ).trim()
+                    echo "Row count output: ${rowCountOutput}"
                 }
             }
         }
-        stage('Get row count') {
+        stage('Display anomaly results') {
+            when { expression { rowCountOutput.toInteger() > 0 } }
             steps {
                 script {
-                    intention.startAction("database")
-                    podman.run("${CONTAINER_IMAGE_LIQUBASE}",
-                        authfile: "${TMP_VOLUME}/${AUTHFILE}",
-                        options: "--rm \
-                            --security-opt label=disable \
-                            --userns keep-id \
-                            -v \$(pwd)/${TMP_VOLUME}:${DATASCAN_HOME_DIR}",
-                        command: "--env ${TARGET_ENV_SHORT}"
-                    )
+                    sh '${TMP_VOLUME}/run-database-scan.sh --env ${TARGET_ENV_SHORT}'
                 }
             }
         }
@@ -280,7 +255,7 @@ pipeline {
                 deleteDirs: true
             )
             script {
-                if (TMP_VOLUME.startsWith('datascan.')) {
+                if (TMP_VOLUME.startsWith('database-scan.')) {
                     echo "Delete temporary directory: ${TMP_VOLUME}"
                     sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
                 } else {
