@@ -124,14 +124,14 @@ pipeline {
                         // Try to fetch GitHub release to verify consistency
                         def releaseCheckStatus = sh(
                             returnStatus: true,
-                            script: "gh api repos/${GH_OWNER}/${GH_REPO}/releases/tags/${GITHUB_TAG} > ${TMP_VOLUME}/release-${BUILD_NUMBER}.json 2>&1"
+                            script: "gh api repos/${GH_OWNER}/${GH_REPO}/releases/tags/${GITHUB_TAG} > release-${BUILD_NUMBER}.json 2>&1"
                         )
 
                         if (releaseCheckStatus == 0) {
                             // GitHub release exists - verify it matches tag name convention
                             def releaseJson = sh(
                                 returnStdout: true,
-                                script: "cat ${TMP_VOLUME}/release-${BUILD_NUMBER}.json"
+                                script: "cat release-${BUILD_NUMBER}.json"
                             )
                             def release = readJSON(text: releaseJson)
                             def isPrereleaseByGithub = release.prerelease
