@@ -198,7 +198,7 @@ pipeline {
                     env.VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
                     def rowCountOutput = sh(
                         returnStdout: true,
-                        script: '${TMP_VOLUME}/run-database-scan.sh --env ${TARGET_ENV_SHORT} --tag ${GITHUB_TAG} --row-count-only'
+                        script: "set +x ; ${TMP_VOLUME}/run-database-scan.sh --env ${TARGET_ENV_SHORT} --tag ${GITHUB_TAG} --row-count-only"
                     ).trim()
                     echo "Row count output: ${rowCountOutput}"
                 }
