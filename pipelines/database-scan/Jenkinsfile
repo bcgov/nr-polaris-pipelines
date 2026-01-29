@@ -189,13 +189,13 @@ pipeline {
                     )
                     intention.open()
                     intention.startAction("login")
-                    def vaultToken = intention.provisionToken("login")
+                    def vaultToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vault = new Vault(vaultToken)
                     def registryCreds = vault.read('apps/data/prod/db-pipeline/nr-database-migration/artifactory')
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
                     intention.startAction("database")
-                    env.VAULT_TOKEN = intention.provisionToken("database")
+                    env.VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
                     def rowCountOutput = sh(
                         returnStdout: true,
                         script: '${TMP_VOLUME}/run-database-scan.sh --env ${TARGET_ENV_SHORT} --row-count-only'
