@@ -1,0 +1,289 @@
+name: Sync Maven Packages to Artifactory
+
+on:
+  workflow_dispatch:
+    inputs:
+      repositories:
+        description: 'Comma-separated list of repositories to scan (owner/repo)'
+        required: false
+        default: ''
+  # schedule:
+  #   # Run daily at 3 AM UTC
+  #   - cron: '0 3 * * *'
+
+env:
+  GITHUB_REGISTRY: https://maven.pkg.github.com
+  ARTIFACTORY_REGISTRY: ${{ secrets.ARTIFACTORY_MAVEN_REGISTRY }}
+
+jobs:
+  sync-maven-packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up repositories list
+        id: setup
+        run: |
+          if [ -n "${{ github.event.inputs.repositories }}" ]; then
+            echo "repositories=${{ github.event.inputs.repositories }}" >> $GITHUB_OUTPUT
+          else
+            # Default repositories to scan (customize this list)
+            echo "repositories=bcgov-nr/polaris-pipelines,bcgov-nr/action-builder-ghcr" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure Maven settings
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                                        http://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <servers>
+              <server>
+                <id>github</id>
+                <username>\${env.GITHUB_ACTOR}</username>
+                <password>\${env.GITHUB_TOKEN}</password>
+              </server>
+              <server>
+                <id>artifactory</id>
+                <username>\${env.ARTIFACTORY_USERNAME}</username>
+                <password>\${env.ARTIFACTORY_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      - name: Scan and sync Maven packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+          REPOSITORIES: ${{ steps.setup.outputs.repositories }}
+        run: |
+          set -e
+
+          echo "Starting Maven package sync process..."
+
+          # Create sync tracking file
+          SYNC_LOG="maven-sync-log-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Maven sync started at $(date)" > "$SYNC_LOG"
+
+          # Split repositories by comma
+          IFS=',' read -ra REPO_ARRAY <<< "$REPOSITORIES"
+
+          for REPO in "${REPO_ARRAY[@]}"; do
+            REPO=$(echo "$REPO" | xargs) # Trim whitespace
+            echo "================================================"
+            echo "Processing repository: $REPO"
+            echo "================================================"
+
+            # Get all packages for the repository
+            OWNER=$(echo "$REPO" | cut -d'/' -f1)
+            REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+
+            # Fetch Maven packages from GitHub
+            echo "Fetching Maven packages from $REPO..."
+            PACKAGES=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/orgs/$OWNER/packages?package_type=maven&per_page=100" \
+              --jq '.[] | select(.repository.name == "'$REPO_NAME'") | {name: .name, group_id: .group_id, artifact_id: .artifact_id}' 2>/dev/null || echo "")
+
+            if [ -z "$PACKAGES" ]; then
+              echo "No packages found for org $OWNER, trying user packages..."
+              PACKAGES=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/users/$OWNER/packages?package_type=maven&per_page=100" \
+                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | {name: .name, group_id: .group_id, artifact_id: .artifact_id}' 2>/dev/null || echo "")
+            fi
+
+            if [ -z "$PACKAGES" ]; then
+              echo "Warning: No Maven packages found for $REPO"
+              echo "$REPO: No Maven packages found" >> "$SYNC_LOG"
+              continue
+            fi
+
+            # Process each package
+            echo "$PACKAGES" | jq -c '.' | while IFS= read -r PACKAGE; do
+              if [ -z "$PACKAGE" ] || [ "$PACKAGE" = "null" ]; then
+                continue
+              fi
+
+              PACKAGE_NAME=$(echo "$PACKAGE" | jq -r '.name')
+              GROUP_ID=$(echo "$PACKAGE" | jq -r '.group_id // empty')
+              ARTIFACT_ID=$(echo "$PACKAGE" | jq -r '.artifact_id // empty')
+
+              echo "Processing package: $PACKAGE_NAME"
+              echo "  Group ID: $GROUP_ID"
+              echo "  Artifact ID: $ARTIFACT_ID"
+
+              if [ -z "$GROUP_ID" ] || [ -z "$ARTIFACT_ID" ]; then
+                echo "  Skipping: Missing group_id or artifact_id"
+                continue
+              fi
+
+              # Get all versions for this package
+              VERSIONS=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100" \
+                --jq '.[].name' 2>/dev/null || \
+                gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/users/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100" \
+                --jq '.[].name' 2>/dev/null || echo "")
+
+              if [ -z "$VERSIONS" ]; then
+                echo "  No versions found for $PACKAGE_NAME"
+                continue
+              fi
+
+              # Sync each version
+              while IFS= read -r VERSION; do
+                if [ -z "$VERSION" ]; then
+                  continue
+                fi
+
+                echo "  Syncing version: $VERSION"
+
+                GROUP_PATH=$(echo "$GROUP_ID" | tr '.' '/')
+
+                # Download from GitHub Packages
+                TEMP_DIR=$(mktemp -d)
+
+                # Try to download the POM file first
+                GITHUB_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.pom"
+
+                if curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                     "$GITHUB_URL" \
+                     -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.pom" 2>/dev/null; then
+                  echo "    ✓ Downloaded POM from GitHub"
+
+                  # Download JAR file
+                  JAR_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.jar"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$JAR_URL" \
+                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.jar" 2>/dev/null || echo "    (No JAR file found)"
+
+                  # Download sources if available
+                  SOURCES_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}-sources.jar"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$SOURCES_URL" \
+                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}-sources.jar" 2>/dev/null || echo "    (No sources JAR found)"
+
+                  # Upload to Artifactory using mvn deploy:deploy-file
+                  for FILE in "$TEMP_DIR"/*; do
+                    if [ ! -f "$FILE" ]; then
+                      continue
+                    fi
+
+                    FILENAME=$(basename "$FILE")
+
+                    if [[ "$FILENAME" == *.pom ]]; then
+                      # Deploy POM
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=pom \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded POM to Artifactory"
+                      else
+                        echo "    ✗ Failed to upload POM"
+                      fi
+                    elif [[ "$FILENAME" == *-sources.jar ]]; then
+                      # Deploy sources
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dclassifier=sources \
+                           -Dpackaging=jar \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded sources JAR to Artifactory"
+                      else
+                        echo "    ✗ Failed to upload sources JAR"
+                      fi
+                    elif [[ "$FILENAME" == *.jar ]]; then
+                      # Deploy main JAR
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=jar \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded JAR to Artifactory"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      else
+                        echo "    ✗ Failed to upload JAR"
+                        echo "FAILED: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      fi
+                    fi
+                  done
+                else
+                  echo "    ✗ Failed to download from GitHub"
+                  echo "FAILED (download): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                fi
+
+                # Cleanup
+                rm -rf "$TEMP_DIR"
+
+              done <<< "$VERSIONS"
+
+            done
+
+          done
+
+          echo ""
+          echo "================================================"
+          echo "Maven Sync Summary"
+          echo "================================================"
+          cat "$SYNC_LOG"
+
+          # Count results
+          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || echo "0")
+          FAILED_COUNT=$(grep -c "^FAILED:" "$SYNC_LOG" || echo "0")
+
+          echo ""
+          echo "Total successful syncs: $SUCCESS_COUNT"
+          echo "Total failures: $FAILED_COUNT"
+
+      - name: Upload sync log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maven-sync-log-${{ github.run_number }}
+          path: maven-sync-log-*.txt
+          retention-days: 30
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf ~/.m2/repository/* || true

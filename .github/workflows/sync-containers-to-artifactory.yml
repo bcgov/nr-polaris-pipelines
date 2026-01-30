@@ -1,0 +1,201 @@
+name: Sync Containers to Artifactory
+
+on:
+  workflow_dispatch:
+    inputs:
+      repositories:
+        description: 'Comma-separated list of repositories to scan (owner/repo)'
+        required: false
+        default: ''
+  # schedule:
+  #   # Run daily at 2 AM UTC
+  #   - cron: '0 2 * * *'
+
+env:
+  GHCR_REGISTRY: ghcr.io
+  ARTIFACTORY_REGISTRY: ${{ secrets.ARTIFACTORY_DOCKER_REGISTRY }}
+
+jobs:
+  sync-containers:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up repositories list
+        id: setup
+        run: |
+          if [ -n "${{ github.event.inputs.repositories }}" ]; then
+            echo "repositories=${{ github.event.inputs.repositories }}" >> $GITHUB_OUTPUT
+          else
+            # Default repositories to scan (customize this list)
+            echo "repositories=bcgov-c/nr-hbs-daily-data-scan" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Login to Artifactory
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ARTIFACTORY_REGISTRY }}
+          username: ${{ secrets.ARTIFACTORY_USERNAME }}
+          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+      - name: Scan and sync containers
+        env:
+          GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
+          REPOSITORIES: ${{ steps.setup.outputs.repositories }}
+        run: |
+          set -e
+
+          echo "Starting container sync process..."
+
+          # Create sync tracking file
+          SYNC_LOG="sync-log-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Sync started at $(date)" > "$SYNC_LOG"
+
+          # Split repositories by comma
+          IFS=',' read -ra REPO_ARRAY <<< "$REPOSITORIES"
+
+          for REPO in "${REPO_ARRAY[@]}"; do
+            REPO=$(echo "$REPO" | xargs) # Trim whitespace
+            echo "================================================"
+            echo "Processing repository: $REPO"
+            echo "================================================"
+
+            # Get all packages for the repository
+            OWNER=$(echo "$REPO" | cut -d'/' -f1)
+            REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+
+            # Fetch container packages from GHCR
+            echo "Fetching packages from $REPO..."
+            PACKAGES=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/orgs/$OWNER/packages?package_type=container&per_page=100" \
+              --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
+
+            if [ -z "$PACKAGES" ]; then
+              echo "No packages found for $REPO, trying user packages..."
+              PACKAGES=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/users/$OWNER/packages?package_type=container&per_page=100" \
+                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
+            fi
+
+            if [ -z "$PACKAGES" ]; then
+              echo "Warning: No container packages found for $REPO"
+              echo "$REPO: No packages found" >> "$SYNC_LOG"
+              continue
+            fi
+
+            # Process each package
+            while IFS= read -r PACKAGE; do
+              if [ -z "$PACKAGE" ]; then
+                continue
+              fi
+
+              echo "Processing package: $PACKAGE"
+
+              # Get all versions/tags for this package
+              VERSIONS=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100" \
+                --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || \
+                gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100" \
+                --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
+
+              if [ -z "$VERSIONS" ]; then
+                echo "No tagged versions found for $PACKAGE"
+                continue
+              fi
+
+              # Sync each tagged version
+              while IFS= read -r TAG; do
+                if [ -z "$TAG" ]; then
+                  continue
+                fi
+
+                # Remove quotes from tag
+                TAG=$(echo "$TAG" | tr -d '"')
+
+                SOURCE_IMAGE="${GHCR_REGISTRY}/${OWNER}/${PACKAGE}:${TAG}"
+                DEST_IMAGE="${ARTIFACTORY_REGISTRY}/${OWNER}/${PACKAGE}:${TAG}"
+
+                echo "Syncing: $SOURCE_IMAGE -> $DEST_IMAGE"
+
+                # Check if image already exists in Artifactory (optional optimization)
+                if docker manifest inspect "$DEST_IMAGE" > /dev/null 2>&1; then
+                  echo "  ✓ Image already exists in Artifactory, skipping"
+                  continue
+                fi
+
+                # Pull from GHCR
+                if docker pull "$SOURCE_IMAGE"; then
+                  echo "  ✓ Pulled from GHCR"
+
+                  # Tag for Artifactory
+                  docker tag "$SOURCE_IMAGE" "$DEST_IMAGE"
+
+                  # Push to Artifactory
+                  if docker push "$DEST_IMAGE"; then
+                    echo "  ✓ Pushed to Artifactory"
+                    echo "SUCCESS: $SOURCE_IMAGE -> $DEST_IMAGE" >> "$SYNC_LOG"
+                  else
+                    echo "  ✗ Failed to push to Artifactory"
+                    echo "FAILED (push): $DEST_IMAGE" >> "$SYNC_LOG"
+                  fi
+
+                  # Clean up local images to save space
+                  docker rmi "$SOURCE_IMAGE" "$DEST_IMAGE" 2>/dev/null || true
+                else
+                  echo "  ✗ Failed to pull from GHCR"
+                  echo "FAILED (pull): $SOURCE_IMAGE" >> "$SYNC_LOG"
+                fi
+
+              done <<< "$VERSIONS"
+
+            done <<< "$PACKAGES"
+
+          done
+
+          echo ""
+          echo "================================================"
+          echo "Sync Summary"
+          echo "================================================"
+          cat "$SYNC_LOG"
+
+          # Count results
+          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || echo "0")
+          FAILED_COUNT=$(grep -c "^FAILED:" "$SYNC_LOG" || echo "0")
+
+          echo ""
+          echo "Total successful syncs: $SUCCESS_COUNT"
+          echo "Total failures: $FAILED_COUNT"
+
+      - name: Upload sync log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-log-${{ github.run_number }}
+          path: sync-log-*.txt
+          retention-days: 30
+
+      - name: Cleanup Docker images
+        if: always()
+        run: |
+          docker system prune -af --volumes || true
