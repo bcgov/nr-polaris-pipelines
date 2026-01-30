@@ -7,13 +7,13 @@ on:
         description: 'Comma-separated list of repositories to scan (owner/repo)'
         required: false
         default: ''
-  schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
+  # schedule:
+  #   # Run daily at 2 AM UTC
+  #   - cron: '0 2 * * *'
 
 env:
   GHCR_REGISTRY: ghcr.io
-  ARTIFACTORY_REGISTRY: ${{ secrets.ARTIFACTORY_REGISTRY }}
+  ARTIFACTORY_REGISTRY: ${{ secrets.ARTIFACTORY_DOCKER_REGISTRY }}
 
 jobs:
   sync-containers:
@@ -33,7 +33,7 @@ jobs:
             echo "repositories=${{ github.event.inputs.repositories }}" >> $GITHUB_OUTPUT
           else
             # Default repositories to scan (customize this list)
-            echo "repositories=bcgov-nr/polaris-pipelines,bcgov-nr/action-builder-ghcr" >> $GITHUB_OUTPUT
+            echo "repositories=bcgov-c/nr-hbs-daily-data-scan" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to GitHub Container Registry
