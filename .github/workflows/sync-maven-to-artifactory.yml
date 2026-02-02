@@ -159,12 +159,6 @@ jobs:
               done
             fi
 
-            if [ ! -s "$PACKAGES_FILE" ]; then
-              echo "Warning: No Maven packages found for $REPO"
-              echo "$REPO: No Maven packages found" >> "$SYNC_LOG"
-              continue
-            fi
-
             # Process each package (names only) - loop over variable
             while IFS= read -r PACKAGE; do
               if [ -z "$PACKAGE" ]; then
