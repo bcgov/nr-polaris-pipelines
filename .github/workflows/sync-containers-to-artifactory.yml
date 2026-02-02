@@ -76,21 +76,52 @@ jobs:
             OWNER=$(echo "$REPO" | cut -d'/' -f1)
             REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
 
-            # Fetch container packages from GHCR
-            echo "Fetching packages from $REPO..."
-            PACKAGES=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/orgs/$OWNER/packages?package_type=container&per_page=100" \
-              --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
-
-            if [ -z "$PACKAGES" ]; then
-              echo "No packages found for $REPO, trying user packages..."
-              PACKAGES=$(gh api \
+            # Fetch container packages from GHCR with pagination (accumulate into variable)
+            echo "Fetching packages from $REPO (paginated)..."
+            PACKAGES=""
+            PAGE=1
+            while true; do
+              COUNT=$(gh api \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/users/$OWNER/packages?package_type=container&per_page=100" \
+                "/orgs/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
+                --jq 'length' 2>/dev/null || echo "0")
+              if [ "$COUNT" = "0" ]; then
+                break
+              fi
+              PAGE_LINES=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/orgs/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
                 --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
+              if [ -n "$PAGE_LINES" ]; then
+                PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
+              fi
+              PAGE=$((PAGE+1))
+            done
+
+            if [ -z "$PACKAGES" ]; then
+              echo "No org packages found; trying user packages (paginated)..."
+              PAGE=1
+              while true; do
+                COUNT=$(gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "/users/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
+                  --jq 'length' 2>/dev/null || echo "0")
+                if [ "$COUNT" = "0" ]; then
+                  break
+                fi
+                PAGE_LINES=$(gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "/users/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
+                  --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
+                if [ -n "$PAGE_LINES" ]; then
+                  PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
+                fi
+                PAGE=$((PAGE+1))
+              done
             fi
 
             if [ -z "$PACKAGES" ]; then
@@ -99,7 +130,7 @@ jobs:
               continue
             fi
 
-            # Process each package
+            # Process each package - loop over variable
             while IFS= read -r PACKAGE; do
               if [ -z "$PACKAGE" ]; then
                 continue
@@ -107,24 +138,58 @@ jobs:
 
               echo "Processing package: $PACKAGE"
 
-              # Get all versions/tags for this package
-              VERSIONS=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100" \
-                --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || \
-                gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100" \
-                --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
+              # Get all versions/tags for this package with pagination (accumulate into variable)
+              VERSIONS=""
+              PAGE=1
+              while true; do
+                COUNT=$(gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
+                  --jq 'length' 2>/dev/null || echo "0")
+                if [ "$COUNT" = "0" ]; then
+                  break
+                fi
+                PAGE_TAGS=$(gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
+                  --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
+                if [ -n "$PAGE_TAGS" ]; then
+                  VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
+                fi
+                PAGE=$((PAGE+1))
+              done
+
+              if [ -z "$VERSIONS" ]; then
+                PAGE=1
+                while true; do
+                  COUNT=$(gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
+                    --jq 'length' 2>/dev/null || echo "0")
+                  if [ "$COUNT" = "0" ]; then
+                    break
+                  fi
+                  PAGE_TAGS=$(gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
+                    --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
+                  if [ -n "$PAGE_TAGS" ]; then
+                    VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
+                  fi
+                  PAGE=$((PAGE+1))
+                done
+              fi
 
               if [ -z "$VERSIONS" ]; then
                 echo "No tagged versions found for $PACKAGE"
                 continue
               fi
 
-              # Sync each tagged version
+              # Sync each tagged version - loop over variable
               while IFS= read -r TAG; do
                 if [ -z "$TAG" ]; then
                   continue
