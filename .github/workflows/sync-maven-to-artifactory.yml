@@ -7,6 +7,10 @@ on:
         description: 'Comma-separated list of repositories to scan (owner/repo)'
         required: false
         default: ''
+      package:
+        description: 'Optional Maven package filter (groupId:artifactId or name)'
+        required: false
+        default: ''
   # schedule:
   #   # Run daily at 3 AM UTC
   #   - cron: '0 3 * * *'
@@ -32,7 +36,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up repositories list
+      - name: Set up inputs
         id: setup
         run: |
           if [ -n "${{ github.event.inputs.repositories }}" ]; then
@@ -40,6 +44,12 @@ jobs:
           else
             # Default repositories to scan (customize this list)
             echo "repositories=bcgov-nr/polaris-pipelines,bcgov-nr/action-builder-ghcr" >> $GITHUB_OUTPUT
+          fi
+          # Package filter (optional)
+          if [ -n "${{ github.event.inputs.package }}" ]; then
+            echo "package=${{ github.event.inputs.package }}" >> $GITHUB_OUTPUT
+          else
+            echo "package=" >> $GITHUB_OUTPUT
           fi
 
       - name: Configure Maven settings
@@ -72,10 +82,17 @@ jobs:
           ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
           REPOSITORIES: ${{ steps.setup.outputs.repositories }}
+          PACKAGE_FILTER: ${{ steps.setup.outputs.package }}
         run: |
           set -e
 
           echo "Starting Maven package sync process..."
+
+          if [ -n "$PACKAGE_FILTER" ]; then
+            echo "Package filter enabled: '$PACKAGE_FILTER'"
+          else
+            echo "No package filter provided; syncing all packages found."
+          fi
 
           # Create sync tracking file
           SYNC_LOG="maven-sync-log-$(date +%Y%m%d-%H%M%S).txt"
@@ -130,6 +147,14 @@ jobs:
               echo "Processing package: $PACKAGE_NAME"
               echo "  Group ID: $GROUP_ID"
               echo "  Artifact ID: $ARTIFACT_ID"
+
+              # Apply optional package filter
+              if [ -n "$PACKAGE_FILTER" ]; then
+                if [ "$PACKAGE_FILTER" != "$GROUP_ID:$ARTIFACT_ID" ] && [ "$PACKAGE_FILTER" != "$PACKAGE_NAME" ]; then
+                  echo "  Skipping: does not match filter '$PACKAGE_FILTER'"
+                  continue
+                fi
+              fi
 
               if [ -z "$GROUP_ID" ] || [ -z "$ARTIFACT_ID" ]; then
                 echo "  Skipping: Missing group_id or artifact_id"
