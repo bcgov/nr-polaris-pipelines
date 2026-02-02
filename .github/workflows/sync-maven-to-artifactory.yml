@@ -250,16 +250,10 @@ jobs:
 
                 GROUP_PATH=$(echo "$GROUP_ID" | tr '.' '/')
 
-                # Check if version already exists in Artifactory using AQL search
-                AQL_QUERY="items.find({\"repo\":\"maven\",\"path\":\"/$GROUP_PATH/$ARTIFACT_ID/$VERSION\",\"name\":\"${ARTIFACT_ID}-${VERSION}.pom\"})"
-                SEARCH_RESULT=$(curl -s -X POST \
-                  -H "Authorization: Basic $(echo -n \"$ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD\" | base64)" \
-                  -H "Content-Type: text/plain" \
-                  -d "$AQL_QUERY" \
-                  "${ARTIFACTORY_REGISTRY%/*}/api/search/aql" 2>/dev/null || echo "{}")
-
-                # Check if result contains any results (if "results" array has items)
-                if echo "$SEARCH_RESULT" | grep -q '"results":\s*\[' && ! echo "$SEARCH_RESULT" | grep -q '"results":\s*\[\s*\]'; then
+                # Check if version already exists in Artifactory (optional optimization)
+                ARTIFACTORY_URL="${ARTIFACTORY_REGISTRY}/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.pom"
+                if curl -f -s -H "Authorization: Basic $(echo -n \"$ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD\" | base64)\" \
+                     "$ARTIFACTORY_URL" > /dev/null 2>&1; then
                   echo "    ✓ Version already exists in Artifactory, skipping"
                   continue
                 fi
