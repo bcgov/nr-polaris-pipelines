@@ -250,6 +250,20 @@ jobs:
 
                 GROUP_PATH=$(echo "$GROUP_ID" | tr '.' '/')
 
+                # Check if version already exists in Artifactory using AQL search
+                AQL_QUERY="items.find({\"repo\":\"maven\",\"path\":\"/$GROUP_PATH/$ARTIFACT_ID/$VERSION\",\"name\":\"${ARTIFACT_ID}-${VERSION}.pom\"})"
+                SEARCH_RESULT=$(curl -s -X POST \
+                  -H "Authorization: Basic $(echo -n \"$ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD\" | base64)" \
+                  -H "Content-Type: text/plain" \
+                  -d "$AQL_QUERY" \
+                  "${ARTIFACTORY_REGISTRY%/*}/api/search/aql" 2>/dev/null || echo "{}")
+
+                # Check if result contains any results (if "results" array has items)
+                if echo "$SEARCH_RESULT" | grep -q '"results":\s*\[' && ! echo "$SEARCH_RESULT" | grep -q '"results":\s*\[\s*\]'; then
+                  echo "    ✓ Version already exists in Artifactory, skipping"
+                  continue
+                fi
+
                 # Download from GitHub Packages
                 TEMP_DIR=$(mktemp -d)
 
