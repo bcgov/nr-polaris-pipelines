@@ -128,7 +128,7 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
                 "/orgs/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | {name: .name, group_id: .group_id, artifact_id: .artifact_id}' 2>/dev/null || echo "")
+                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
               if [ -n "$PAGE_LINES" ]; then
                 printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
               fi
@@ -151,7 +151,7 @@ jobs:
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
                   "/users/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                  --jq '.[] | select(.repository.name == "'$REPO_NAME'") | {name: .name, group_id: .group_id, artifact_id: .artifact_id}' 2>/dev/null || echo "")
+                  --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
                 if [ -n "$PAGE_LINES" ]; then
                   printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
                 fi
@@ -166,31 +166,34 @@ jobs:
               continue
             fi
 
-            # Process each package
-            cat "$PACKAGES_FILE" | jq -c '.' | while IFS= read -r PACKAGE; do
-              if [ -z "$PACKAGE" ] || [ "$PACKAGE" = "null" ]; then
+            # Process each package (names only)
+            while IFS= read -r PACKAGE; do
+              if [ -z "$PACKAGE" ]; then
                 continue
               fi
 
-              PACKAGE_NAME=$(echo "$PACKAGE" | jq -r '.name')
-              GROUP_ID=$(echo "$PACKAGE" | jq -r '.group_id // empty')
-              ARTIFACT_ID=$(echo "$PACKAGE" | jq -r '.artifact_id // empty')
+              # Remove quotes if present (gh --jq outputs JSON strings by default)
+              PACKAGE_NAME=$(echo "$PACKAGE" | tr -d '"')
+
+              # Derive groupId and artifactId from name (format: groupId.artifactId)
+              if [[ "$PACKAGE_NAME" == *.* ]]; then
+                ARTIFACT_ID=${PACKAGE_NAME##*.}
+                GROUP_ID=${PACKAGE_NAME%.*}
+              else
+                echo "  Skipping: Cannot derive group/artifact from name '$PACKAGE_NAME'"
+                continue
+              fi
 
               echo "Processing package: $PACKAGE_NAME"
               echo "  Group ID: $GROUP_ID"
               echo "  Artifact ID: $ARTIFACT_ID"
 
-              # Apply optional package filter
+              # Apply optional package filter (match by full name or groupId:artifactId)
               if [ -n "$PACKAGE_FILTER" ]; then
                 if [ "$PACKAGE_FILTER" != "$GROUP_ID:$ARTIFACT_ID" ] && [ "$PACKAGE_FILTER" != "$PACKAGE_NAME" ]; then
                   echo "  Skipping: does not match filter '$PACKAGE_FILTER'"
                   continue
                 fi
-              fi
-
-              if [ -z "$GROUP_ID" ] || [ -z "$ARTIFACT_ID" ]; then
-                echo "  Skipping: Missing group_id or artifact_id"
-                continue
               fi
 
               # Get all versions for this package with pagination (accumulate into file)
@@ -239,8 +242,9 @@ jobs:
                 done
               fi
 
-              if [ -z "$VERSIONS" ]; then
+              if [ ! -s "$VERSIONS_FILE" ]; then
                 echo "  No versions found for $PACKAGE_NAME"
+                rm -f "$VERSIONS_FILE"
                 continue
               fi
 
