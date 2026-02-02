@@ -111,9 +111,9 @@ jobs:
             OWNER=$(echo "$REPO" | cut -d'/' -f1)
             REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
 
-            # Fetch Maven packages from GitHub with pagination (accumulate into file)
+            # Fetch Maven packages from GitHub with pagination (accumulate into variable)
             echo "Fetching Maven packages from $REPO (paginated)..."
-            PACKAGES_FILE=$(mktemp)
+            PACKAGES=""
             PAGE=1
             while true; do
               COUNT=$(gh api \
@@ -130,12 +130,12 @@ jobs:
                 "/orgs/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
                 --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
               if [ -n "$PAGE_LINES" ]; then
-                printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
+                PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
               fi
               PAGE=$((PAGE+1))
             done
 
-            if [ ! -s "$PACKAGES_FILE" ]; then
+            if [ -z "$PACKAGES" ]; then
               echo "No packages found for org $OWNER, trying user packages (paginated)..."
               PAGE=1
               while true; do
@@ -153,7 +153,7 @@ jobs:
                   "/users/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
                   --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
                 if [ -n "$PAGE_LINES" ]; then
-                  printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
+                  PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
                 fi
                 PAGE=$((PAGE+1))
               done
@@ -162,11 +162,10 @@ jobs:
             if [ ! -s "$PACKAGES_FILE" ]; then
               echo "Warning: No Maven packages found for $REPO"
               echo "$REPO: No Maven packages found" >> "$SYNC_LOG"
-              rm -f "$PACKAGES_FILE"
               continue
             fi
 
-            # Process each package (names only)
+            # Process each package (names only) - loop over variable
             while IFS= read -r PACKAGE; do
               if [ -z "$PACKAGE" ]; then
                 continue
@@ -196,8 +195,8 @@ jobs:
                 fi
               fi
 
-              # Get all versions for this package with pagination (accumulate into file)
-              VERSIONS_FILE=$(mktemp)
+              # Get all versions for this package with pagination (accumulate into variable)
+              VERSIONS=""
               PAGE=1
               while true; do
                 COUNT=$(gh api \
@@ -214,12 +213,12 @@ jobs:
                   "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
                   --jq '.[].name' 2>/dev/null || echo "")
                 if [ -n "$PAGE_VERS" ]; then
-                  printf "%s\n" "$PAGE_VERS" >> "$VERSIONS_FILE"
+                  VERSIONS="${VERSIONS}${PAGE_VERS}$"$'\n'
                 fi
                 PAGE=$((PAGE+1))
               done
 
-              if [ ! -s "$VERSIONS_FILE" ]; then
+              if [ -z "$VERSIONS" ]; then
                 PAGE=1
                 while true; do
                   COUNT=$(gh api \
@@ -236,19 +235,18 @@ jobs:
                     "/users/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
                     --jq '.[].name' 2>/dev/null || echo "")
                   if [ -n "$PAGE_VERS" ]; then
-                    printf "%s\n" "$PAGE_VERS" >> "$VERSIONS_FILE"
+                    VERSIONS="${VERSIONS}${PAGE_VERS}$"$'\n'
                   fi
                   PAGE=$((PAGE+1))
                 done
               fi
 
-              if [ ! -s "$VERSIONS_FILE" ]; then
+              if [ -z "$VERSIONS" ]; then
                 echo "  No versions found for $PACKAGE_NAME"
-                rm -f "$VERSIONS_FILE"
                 continue
               fi
 
-              # Sync each version
+              # Sync each version - loop over variable
               while IFS= read -r VERSION; do
                 if [ -z "$VERSION" ]; then
                   continue
@@ -350,13 +348,11 @@ jobs:
                 # Cleanup
                 rm -rf "$TEMP_DIR"
 
-              done < "$VERSIONS_FILE"
+              done <<< "$VERSIONS"
 
               rm -f "$VERSIONS_FILE"
 
-            done
-
-            rm -f "$PACKAGES_FILE"
+            done <<< "$PACKAGES"
 
           done
 
