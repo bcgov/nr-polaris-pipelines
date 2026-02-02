@@ -76,9 +76,9 @@ jobs:
             OWNER=$(echo "$REPO" | cut -d'/' -f1)
             REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
 
-            # Fetch container packages from GHCR with pagination (accumulate into file)
+            # Fetch container packages from GHCR with pagination (accumulate into variable)
             echo "Fetching packages from $REPO (paginated)..."
-            PACKAGES_FILE=$(mktemp)
+            PACKAGES=""
             PAGE=1
             while true; do
               COUNT=$(gh api \
@@ -95,12 +95,12 @@ jobs:
                 "/orgs/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
                 --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
               if [ -n "$PAGE_LINES" ]; then
-                printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
+                PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
               fi
               PAGE=$((PAGE+1))
             done
 
-            if [ ! -s "$PACKAGES_FILE" ]; then
+            if [ -z "$PACKAGES" ]; then
               echo "No org packages found; trying user packages (paginated)..."
               PAGE=1
               while true; do
@@ -118,20 +118,19 @@ jobs:
                   "/users/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
                   --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
                 if [ -n "$PAGE_LINES" ]; then
-                  printf "%s\n" "$PAGE_LINES" >> "$PACKAGES_FILE"
+                  PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
                 fi
                 PAGE=$((PAGE+1))
               done
             fi
 
-            if [ ! -s "$PACKAGES_FILE" ]; then
+            if [ -z "$PACKAGES" ]; then
               echo "Warning: No container packages found for $REPO"
               echo "$REPO: No packages found" >> "$SYNC_LOG"
-              rm -f "$PACKAGES_FILE"
               continue
             fi
 
-            # Process each package
+            # Process each package - loop over variable
             while IFS= read -r PACKAGE; do
               if [ -z "$PACKAGE" ]; then
                 continue
@@ -139,8 +138,8 @@ jobs:
 
               echo "Processing package: $PACKAGE"
 
-              # Get all versions/tags for this package with pagination (accumulate into file)
-              VERSIONS_FILE=$(mktemp)
+              # Get all versions/tags for this package with pagination (accumulate into variable)
+              VERSIONS=""
               PAGE=1
               while true; do
                 COUNT=$(gh api \
@@ -157,12 +156,12 @@ jobs:
                   "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
                   --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
                 if [ -n "$PAGE_TAGS" ]; then
-                  printf "%s\n" "$PAGE_TAGS" >> "$VERSIONS_FILE"
+                  VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
                 fi
                 PAGE=$((PAGE+1))
               done
 
-              if [ ! -s "$VERSIONS_FILE" ]; then
+              if [ -z "$VERSIONS" ]; then
                 PAGE=1
                 while true; do
                   COUNT=$(gh api \
@@ -179,19 +178,18 @@ jobs:
                     "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
                     --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
                   if [ -n "$PAGE_TAGS" ]; then
-                    printf "%s\n" "$PAGE_TAGS" >> "$VERSIONS_FILE"
+                    VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
                   fi
                   PAGE=$((PAGE+1))
                 done
               fi
 
-              if [ ! -s "$VERSIONS_FILE" ]; then
+              if [ -z "$VERSIONS" ]; then
                 echo "No tagged versions found for $PACKAGE"
-                rm -f "$VERSIONS_FILE"
                 continue
               fi
 
-              # Sync each tagged version
+              # Sync each tagged version - loop over variable
               while IFS= read -r TAG; do
                 if [ -z "$TAG" ]; then
                   continue
@@ -234,13 +232,9 @@ jobs:
                   echo "FAILED (pull): $SOURCE_IMAGE" >> "$SYNC_LOG"
                 fi
 
-              done < "$VERSIONS_FILE"
+              done <<< "$VERSIONS"
 
-              rm -f "$VERSIONS_FILE"
-
-            done < "$PACKAGES_FILE"
-
-            rm -f "$PACKAGES_FILE"
+            done <<< "$PACKAGES"
 
           done
 
