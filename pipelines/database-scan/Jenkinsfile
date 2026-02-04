@@ -74,115 +74,7 @@ pipeline {
                 echo "GitHub tag: ${GITHUB_TAG}"
             }
         }
-        stage('Get github token') {
-            steps {
-                script {
-                    // open intention to get github app creds
-                    intention = new BrokerIntention(NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-github-app-transient.json'))
-                    intention.setEventDetails(
-                        userName: env.CAUSE_USER_ID,
-                        provider: env.EVENT_PROVIDER,
-                        url: env.BUILD_URL,
-                        serviceName: env.COMPONENT,
-                        serviceProject: env.PROJECT,
-                        environment: "tools"
-                    )
-                    intention.open()
-                    intention.startAction("github-app")
-                    def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
-                    def vaultGhApp = new Vault(vaultGhToken)
-                    def ghAppCreds = vaultGhApp.read("apps/data/tools/db-pipeline/nr-database-migration/github_app")
-                    env.APP_ID = ghAppCreds['gh_app_id']
-                    env.INSTALLATION_ID = ghAppCreds['gh_installation_id']
-                    env.PRIVATE_KEY = ghAppCreds['gh_private_key']
-                    // generate github app jwt
-                    env.GENERATED_JWT = sh(
-                        returnStdout: true,
-                        script: 'set +x ; scripts/generate_jwt.sh'
-                    ).trim()
-                    env.GH_TOKEN = sh(
-                        returnStdout: true,
-                        script: 'set +x ; scripts/get_installation_token.sh'
-                    ).trim()
-                    intention.endAction("github-app")
-                    intention.close(true)
-                }
-            }
-        }
-        stage('Verify GitHub release tag') {
-            steps {
-                script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        // Verify tag exists
-                        def tagExists = sh(
-                            returnStatus: true,
-                            script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} > /dev/null 2>&1"
-                        )
-                        if (tagExists != 0) {
-                            echo "DEBUG: Tag check failed, trying to get more info..."
-                            sh "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} || true"
-                            error("GitHub tag '${env.GITHUB_TAG}' does not exist in repository ${env.GITHUB_OWNER}/${env.GITHUB_REPO}")
-                        }
-
-                        // Determine if pre-release based on tag name (Maven convention: anything with a dash is pre-release)
-                        def tagVersion = env.GITHUB_TAG.replaceFirst(/^v/, '')  // Remove 'v' prefix if present
-                        def isPrereleaseByName = tagVersion.contains('-')
-
-                        // Try to fetch GitHub release to verify consistency
-                        def releaseJson = null
-                        try {
-                            releaseJson = sh(
-                                returnStdout: true,
-                                script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/releases/tags/${env.GITHUB_TAG}"
-                            ).trim()
-                        } catch (Exception e) {
-                            // No GitHub release exists - will handle below
-                        }
-
-                        if (releaseJson) {
-                            // GitHub release exists - verify it matches tag name convention
-                            def release = readJSON(text: releaseJson)
-                            def isPrereleaseByGithub = release.prerelease
-
-                            // Check for mismatch between tag name and GitHub release property
-                            if (isPrereleaseByName != isPrereleaseByGithub) {
-                                error("Inconsistent release configuration for tag '${env.GITHUB_TAG}':\n" +
-                                      "  Tag name indicates: ${isPrereleaseByName ? 'pre-release (contains dash)' : 'release (no dash)'}\n" +
-                                      "  GitHub release marked as: ${isPrereleaseByGithub ? 'pre-release' : 'release'}\n" +
-                                      "Please ensure tag naming and GitHub release settings are consistent.")
-                            }
-                            echo "✓ Verified: Tag name and GitHub release settings are consistent (${isPrereleaseByName ? 'pre-release' : 'release'})"
-                        } else {
-                            // No GitHub release exists - warn but continue based on tag name
-                            echo "⚠ Warning: No GitHub release found for tag '${env.GITHUB_TAG}' - validating based on tag name only"
-                        }
-
-                        // Check if tag matches environment requirements
-                        // Rule: Pre-release tags (with dash) cannot go to production
-                        //       Release tags (without dash) can go to any environment
-                        if (env.TARGET_ENV_LONG == 'production' && isPrereleaseByName) {
-                            error("Cannot deploy pre-release tag '${env.GITHUB_TAG}' to production. Only release tags (without dashes) are allowed.")
-                        }
-
-                        if (isPrereleaseByName) {
-                            echo "✓ Verified: '${env.GITHUB_TAG}' is a pre-release tag (allowed for ${env.TARGET_ENV_LONG})"
-                        } else {
-                            echo "✓ Verified: '${env.GITHUB_TAG}' is a release tag (allowed for any environment)"
-                        }
-                    }
-                }
-            }
-        }
-        stage('Checkout repository') {
-            steps {
-                script {
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        sh "gh repo clone ${env.GITHUB_OWNER}/${env.GITHUB_REPO} ${env.TMP_VOLUME} -- --branch=${env.GITHUB_TAG}"
-                    }
-                }
-            }
-        }
-        stage('Generate Python environment') {
+        stage('Scan for anomalies') {
             steps {
                 script {
                     // open intention to get registry and db creds
@@ -202,58 +94,34 @@ pipeline {
                     def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
-                    env.APP_VAULT_TOKEN = intention.provisionToken("database", env.DB_ROLE_ID)
-                    sh "mkdir -p ${env.TMP_VOLUME}/env && chmod 775 ${env.TMP_VOLUME}/env"
-                    // Generate a new vault.hcl file for the target environment
-                    sh "echo Generating vault.hcl for environment: ${env.TARGET_ENV_SHORT}"
-                    sh "sed \"s/{{TARGET_ENV_SHORT}}/${env.TARGET_ENV_SHORT}/g\" ${env.TMP_VOLUME}/vault.hcl.tpl > ${env.TMP_VOLUME}/env/vault.hcl"
-                    podman = new Podman(this, null)
-                    podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.APP_VAULT_TOKEN, password: env.APP_VAULT_TOKEN]]]) {
-                        podman.run("${env.CONTAINER_IMAGE_CONSUL_TEMPLATE}",
-                            authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}",
-                            options: "--rm \
-                                --security-opt label=disable \
-                                --userns keep-id \
-                                --user \$(id -u):\$(id -g) \
-                                -v \$(pwd)/${env.TMP_VOLUME}:/consul-template \
-                                -w /consul-template \
-                                -e TARGET_ENV_SHORT=${env.TARGET_ENV_SHORT} \
-                                -e VAULT_TOKEN=${env.APP_VAULT_TOKEN}",
-                            command: "-config=/consul-template/env/vault.hcl -once",
-                            returnStatus: true
-                        )
-                    }
-                    intention.endAction("login")
-                }
-            }
-        }
-        stage('Scan for anomalies') {
-            steps {
-                script {
+                    env.VAULT_TOKEN = intention.provisionToken("database", env.DB_ROLE_ID)
                     intention.startAction("database")
                     podman = new Podman(this, null, env.AUTHFILE, "artifacts.developer.gov.bc.ca/cc20-gen-docker-local")
                     podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    // Capture both output and exit code
-                    def scanResult = sh(
-                        returnStdout: true,
-                        script: """
-                            set +e
-                            OUTPUT=\$(podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
-                                -v \$(pwd)/${env.TMP_VOLUME}:/app \
-                                artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE} \
-                                --env ${env.TARGET_ENV_SHORT} --row-count-only)
-                            EXIT_CODE=\$?
-                            echo "\${OUTPUT}"
-                            echo "EXIT_CODE=\${EXIT_CODE}"
-                        """
-                    ).trim()
+                    // Capture both output and exit code, masking VAULT_TOKEN
+                    def scanResult
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'VAULT_TOKEN', password: env.VAULT_TOKEN]]]) {
+                        scanResult = sh(
+                            returnStdout: true,
+                            script: """
+                                set +e
+                                OUTPUT=\$(podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
+                                    -e VAULT_TOKEN=${env.VAULT_TOKEN} \
+                                    artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE}:${env.GITHUB_TAG} \
+                                    --env ${env.TARGET_ENV_SHORT} --row-count-only)
+                                EXIT_CODE=\$?
+                                echo "\${OUTPUT}"
+                                echo "EXIT_CODE=\${EXIT_CODE}"
+                            """
+                        ).trim()
+                    }
 
                     // Parse output and exit code
                     def lines = scanResult.split('\n')
                     def exitCodeLine = lines.find { it.startsWith('EXIT_CODE=') }
                     def exitCode = exitCodeLine ? exitCodeLine.replace('EXIT_CODE=', '').toInteger() : -1
                     env.rowCountOutput = lines.findAll { !it.startsWith('EXIT_CODE=') }.join('\n').trim()
+                    env.exitCode = exitCode.toString()
 
                     echo "Anomaly row count: ${env.rowCountOutput}"
                     echo "Container exit code: ${exitCode}"
@@ -271,29 +139,32 @@ pipeline {
             }
         }
         stage('Display anomaly results') {
-            when { expression { env.rowCountOutput?.toInteger() > 0 } }
+            when { expression { env.exitCode?.toInteger() == SCAN_EXIT_CODE_ANOMALIES } }
             steps {
                 script {
-                    // Display results and validate exit code
-                    def exitCode = sh(
-                        returnStatus: true,
-                        script: """
-                            podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
-                                -v \$(pwd)/${env.TMP_VOLUME}:/app \
-                                artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE} \
-                                --env ${env.TARGET_ENV_SHORT}
-                        """
-                    )
+                    // Display results and validate exit code (mask VAULT_TOKEN)
+                    def displayExitCode
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'VAULT_TOKEN', password: env.VAULT_TOKEN]]]) {
+                        displayExitCode = sh(
+                            returnStatus: true,
+                            script: """
+                                podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
+                                    -e VAULT_TOKEN=${env.VAULT_TOKEN} \
+                                    artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE}:${env.GITHUB_TAG} \
+                                    --env ${env.TARGET_ENV_SHORT}
+                            """
+                        )
+                    }
 
-                    echo "Display results exit code: ${exitCode}"
+                    echo "Display results exit code: ${displayExitCode}"
 
                     // Validate exit code
-                    if (exitCode == SCAN_EXIT_CODE_SUCCESS || exitCode == SCAN_EXIT_CODE_ANOMALIES) {
-                        echo "✓ Results displayed successfully (exit code ${exitCode})"
-                    } else if (exitCode == SCAN_EXIT_CODE_ERROR) {
-                        error("Display failed with error exit code ${exitCode}")
+                    if (displayExitCode == SCAN_EXIT_CODE_SUCCESS || displayExitCode == SCAN_EXIT_CODE_ANOMALIES) {
+                        echo "✓ Results displayed successfully (exit code ${displayExitCode})"
+                    } else if (displayExitCode == SCAN_EXIT_CODE_ERROR) {
+                        error("Display failed with error exit code ${displayExitCode}")
                     } else {
-                        error("Display failed with unexpected exit code ${exitCode}")
+                        error("Display failed with unexpected exit code ${displayExitCode}")
                     }
 
                     // Send email notification about detected anomalies
