@@ -88,7 +88,7 @@ pipeline {
                         environment: "tools"
                     )
                     intention.open()
-                    intention.startAction("data-scan")
+                    intention.startAction("github-app")
                     def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
                     def vaultGhApp = new Vault(vaultGhToken)
                     def ghAppCreds = vaultGhApp.read("apps/data/tools/db-pipeline/nr-database-migration/github_app")
@@ -104,7 +104,7 @@ pipeline {
                         returnStdout: true,
                         script: 'set +x ; scripts/get_installation_token.sh'
                     ).trim()
-                    intention.endAction("data-scan")
+                    intention.endAction("github-app")
                     intention.close(true)
                 }
             }
@@ -186,7 +186,7 @@ pipeline {
             steps {
                 script {
                     // open intention to get registry and db creds
-                    intention = new BrokerIntention(env.NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database.json'))
+                    intention = new BrokerIntention(env.NR_BROKER_TOKEN, readJSON(file: 'scripts/intention-database-transient.json'))
                     intention.setEventDetails(
                         userName: env.CAUSE_USER_ID,
                         provider: env.EVENT_PROVIDER,
@@ -231,6 +231,7 @@ pipeline {
         stage('Scan for anomalies') {
             steps {
                 script {
+                    intention.startAction("database")
                     podman = new Podman(this, null, env.AUTHFILE, "artifacts.developer.gov.bc.ca/cc20-gen-docker-local")
                     podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                     // Capture both output and exit code
@@ -265,6 +266,7 @@ pipeline {
                     } else {
                         error("Scan failed with unexpected exit code ${exitCode}")
                     }
+                    intention.endAction("database")
                 }
             }
         }

@@ -7,7 +7,7 @@
   "actions": [
     {
       "action": "process-start",
-      "id": "data-scan",
+      "id": "github-app",
       "provision": [],
       "service": {
         "name": "",
