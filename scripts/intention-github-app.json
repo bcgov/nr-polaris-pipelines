@@ -6,6 +6,16 @@
   },
   "actions": [
     {
+      "action": "process-start",
+      "id": "github-app",
+      "provision": [],
+      "service": {
+        "name": "",
+        "project": "",
+        "environment": ""
+      }
+    },
+    {
       "action": "server-access",
       "id": "login",
       "provision": ["token/self"],
@@ -16,7 +26,7 @@
         "target": {
           "name": "nr-database-migration",
           "project": "db-pipeline",
-          "environment": "production"
+          "environment": "tools"
         }
       }
     }

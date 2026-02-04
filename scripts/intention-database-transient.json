@@ -17,7 +17,7 @@
         "target": {
           "name": "nr-database-migration",
           "project": "db-pipeline",
-          "environment": "production"
+          "environment": "tools"
         }
       }
     },
