@@ -107,6 +107,7 @@ pipeline {
                                 set +e
                                 OUTPUT=\$(podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
                                     -e VAULT_TOKEN=${env.VAULT_TOKEN} \
+                                    -e APP_ENV=${env.TARGET_ENV_SHORT} \
                                     artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE}:${env.GITHUB_TAG} \
                                     --env ${env.TARGET_ENV_SHORT} --row-count-only)
                                 EXIT_CODE=\$?
@@ -150,6 +151,7 @@ pipeline {
                             script: """
                                 podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
                                     -e VAULT_TOKEN=${env.VAULT_TOKEN} \
+                                    -e APP_ENV=${env.TARGET_ENV_SHORT} \
                                     artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE}:${env.GITHUB_TAG} \
                                     --env ${env.TARGET_ENV_SHORT}
                             """
