@@ -1,0 +1,245 @@
+@Library('polaris')
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.Vault
+
+def env_short = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+def intention
+def podman
+
+pipeline {
+    agent {
+        label Podman.AGENT_LABEL_APP
+    }
+    environment {
+        PROJECT = "${params.project}"
+        COMPONENT = "${params.component}"
+        GH_OWNER = "${params.githubOwner}"
+        GH_REPO = "${params.githubRepo}"
+        GITHUB_TAG = "${params.githubTag}"
+        GITHUB_RUNID= "${params.githubRunId}"
+        TRIGGER_URL = "${params.triggerUrl}"
+        TARGET_ENV_LONG = "${params.envLong}"
+        LIQUIBASE_FRAMEWORK_DIR = "nrmcfs-liquibase-framework"
+        LIQUIBASE_FRAMEWORK_BRANCH = "${params.liquibaseFrameworkBranch != null && params.liquibaseFrameworkBranch != "" ? params.liquibaseFrameworkBranch : "main"}"
+        LIQUIBASE_FRAMEWORK_LOG_LEVEL = "${params.liquibaseFrameworkLogLevel != null && params.liquibaseFrameworkLogLevel != "" ? params.liquibaseFrameworkLogLevel : "WARNING"}"
+        LIQUIBASE_SEARCH_PATH = "${params.liquibaseSearchPath != null && params.liquibaseSearchPath != "" ? params.liquibaseSearchPath : "/liquibase/changelog"}"
+        LIQUIBASE_HOME_DIR =  "/liquibase/changelog"
+        TMP_VOLUME = "liquibase.${UUID.randomUUID().toString()[0..7]}"
+        EVENT_PROVIDER = "${params.eventProvider}"
+        PODMAN_REGISTRY = "docker.io"
+        CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
+        CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.21.1"
+        PODMAN_USER = "wwwadm"
+        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
+        NR_BROKER_TOKEN = credentials('nr-broker-jwt')
+        DB_ROLE_ID = credentials("knox-${params.project}-${params.component}-${env_short}-role-id")
+        AUTHFILE = "auth.json"
+        DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
+    }
+    stages {
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "NRMCFS database migration pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/nrmcfs-database-migration"
+                }
+            }
+        }
+        stage('Setup') {
+            steps {
+                script {
+                    // Validate required parameters
+                    if (!env.GITHUB_TAG || env.GITHUB_TAG.trim().isEmpty()) {
+                        error("GITHUB_TAG parameter is required. Provide a Git tag to deploy (e.g., v1.2.3)")
+                    }
+                    // Set the build display name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.githubTag} - ${params.envLong}"
+                    env.DRY_RUN = params.dryRun == true ? 'true' : 'false'
+                    env.CURRENT_DIR = sh(
+                        returnStdout: true,
+                        script: 'pwd'
+                    ).trim()
+                    env.LIQUIBASE_FRAMEWORK_PATH = "${TMP_VOLUME}/nrmcfs-liquibase-framework"
+                    env.GH_TOKEN = "${params.githubToken}"
+                }
+                sh "mkdir -p ${TMP_VOLUME} && chmod 775 ${TMP_VOLUME}"
+                echo "Git Branch: ${env.GIT_BRANCH}"
+                echo "Current directory: ${env.CURRENT_DIR}"
+                echo "Liquibase search path: ${LIQUIBASE_SEARCH_PATH}"
+                echo "Liquibase framework path: ${LIQUIBASE_FRAMEWORK_PATH}"
+                echo "Dry run: ${env.DRY_RUN}"
+            }
+        }
+        stage('Verify GitHub tag exists') {
+            steps {
+                script {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        def tagExists = sh(
+                            returnStatus: true,
+                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/git/refs/tags/${GITHUB_TAG} > /dev/null 2>&1'
+                        )
+                        if (tagExists != 0) {
+                            error("GitHub tag '${GITHUB_TAG}' does not exist in repository ${GH_OWNER}/${GH_REPO}")
+                        }
+                        echo "✓ Verified: GitHub tag '${GITHUB_TAG}' exists in ${GH_OWNER}/${GH_REPO}"
+                    }
+                }
+            }
+        }
+        stage('Checkout repository') {
+            steps {
+                script {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        sh 'gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}'
+                    }
+                }
+            }
+        }
+        stage('Generate Liquibase properties') {
+            steps {
+                script {
+                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-database.json'))
+                    intention.setEventDetails(
+                        userName: env.DEPLOYMENT_APPROVER,
+                        provider: env.EVENT_PROVIDER,
+                        url: env.BUILD_URL,
+                        serviceName: env.COMPONENT,
+                        serviceProject: env.PROJECT,
+                        triggerId: triggerId,
+                        triggerUrl: env.TRIGGER_URL,
+                        environment: env.TARGET_ENV_LONG
+                    )
+                    intention.open()
+                    intention.startAction("login")
+                    def vaultToken = intention.provisionToken("login")
+                    def vault = new Vault(vaultToken)
+                    def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
+                    env.REGISTRY_USERNAME = registryCreds['sa_username']
+                    env.REGISTRY_PASSWORD = registryCreds['sa_password']
+                    intention.startAction("database")
+                    env.DATABASE_VAULT_TOKEN = intention.provisionToken("database")
+                    podman = new Podman(this, null)
+                    podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'DATABASE_VAULT_TOKEN', password: env.DATABASE_VAULT_TOKEN]]]) {
+                        podman.run("${CONTAINER_IMAGE_CONSUL_TEMPLATE}",
+                            authfile: "${TMP_VOLUME}/${AUTHFILE}",
+                            options: "--rm \
+                                --security-opt label=disable \
+                                --userns keep-id \
+                                -v \$(pwd)/${TMP_VOLUME}:${LIQUIBASE_HOME_DIR} \
+                                -v \$(pwd)/scripts/config.hcl:${LIQUIBASE_HOME_DIR}/config.hcl \
+                                -e TARGET_ENV_SHORT=${env_short} \
+                                -e LIQUIBASE_SEARCH_PATH=${LIQUIBASE_SEARCH_PATH} \
+                                -e PODMAN_WORKDIR=${LIQUIBASE_HOME_DIR} \
+                                -e VAULT_TOKEN=${DATABASE_VAULT_TOKEN}",
+                            command: "-config '/liquibase/changelog/config.hcl' \
+                                -template '/liquibase/changelog/liquibase.properties.tpl:${LIQUIBASE_HOME_DIR}/liquibase.properties' \
+                                -once",
+                            returnStatus: true
+                        )
+                    }
+                    intention.endAction("login")
+                }
+            }
+        }
+        stage('Checkout NRMCFS Liquibase framework') {
+            steps {
+                script {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        sh 'gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${LIQUIBASE_FRAMEWORK_PATH} -- --branch=${LIQUIBASE_FRAMEWORK_BRANCH}'
+                    }
+                }
+            }
+        }
+        stage('Get status') {
+            steps {
+                script {
+                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/status.sh"
+                }
+            }
+        }
+        stage('Update database') {
+            when {
+                expression { return params.rollback == false }
+            }
+            steps {
+                script {
+                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/update-or-rollback.sh --run-update"
+                }
+            }
+        }
+        stage('Rollback database') {
+            when {
+                expression { return params.rollback == true }
+            }
+            steps {
+                script {
+                    sh "${LIQUIBASE_FRAMEWORK_PATH}/scripts/update-or-rollback.sh --run-rollback"
+                }
+            }
+        }
+        stage('Podman logout') {
+            steps {
+                script {
+                    intention.endAction("database")
+                    podman.logout(authfile: "${TMP_VOLUME}/${AUTHFILE}")
+                }
+            }
+        }
+    }
+    post {
+        success {
+            script {
+                if (intention) {
+                    println intention.close(true)
+                }
+            }
+        }
+        unstable {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        failure {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        aborted {
+            script {
+                if (intention) {
+                    println intention.close(false)
+                }
+            }
+        }
+        always {
+            cleanWs(
+                cleanWhenAborted: true,
+                cleanWhenFailure: false,
+                cleanWhenSuccess: true,
+                cleanWhenUnstable: false,
+                deleteDirs: true
+            )
+            script {
+                if (TMP_VOLUME.startsWith('liquibase.')) {
+                    echo "Delete temporary directory: ${TMP_VOLUME}"
+                    sh "rm --preserve-root -rf '${CURRENT_DIR}/${TMP_VOLUME}'"
+                } else {
+                    echo "Skipping deletion of temporary directory: ${TMP_VOLUME}"
+                }
+            }
+        }
+    }
+}
