@@ -128,7 +128,7 @@ pipeline {
                     env.DATABASE_VAULT_TOKEN = intention.provisionToken("database")
                     podman = new Podman(this, null)
                     podman.login(authfile: "${TMP_VOLUME}/${AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.DATABASE_VAULT_TOKEN, password: DATABASE_VAULT_TOKEN]]]) {
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'DATABASE_VAULT_TOKEN', password: env.DATABASE_VAULT_TOKEN]]]) {
                         podman.run("${CONTAINER_IMAGE_CONSUL_TEMPLATE}",
                             authfile: "${TMP_VOLUME}/${AUTHFILE}",
                             options: "--rm \
