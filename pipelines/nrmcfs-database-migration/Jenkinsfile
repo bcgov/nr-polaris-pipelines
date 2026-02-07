@@ -32,9 +32,7 @@ pipeline {
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
         CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.21.1"
         PODMAN_USER = "wwwadm"
-        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
         NR_BROKER_TOKEN = credentials('nr-broker-jwt')
-        DB_ROLE_ID = credentials("knox-${params.project}-${params.component}-${env_short}-role-id")
         AUTHFILE = "auth.json"
         DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
     }
