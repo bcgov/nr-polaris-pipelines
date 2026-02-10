@@ -15,8 +15,8 @@ pipeline {
     environment {
         PROJECT = "${params.project}"
         COMPONENT = "${params.component}"
-        GH_OWNER = "${params.githubOwner}"
-        GH_REPO = "${params.githubRepo}"
+        GITHUB_OWNER = "${params.githubOwner}"
+        GITHUB_REPO = "${params.githubRepo}"
         GITHUB_TAG = "${params.githubTag}"
         GITHUB_RUNID= "${params.githubRunId}"
         TRIGGER_URL = "${params.triggerUrl}"
@@ -75,18 +75,66 @@ pipeline {
                 echo "Dry run: ${env.DRY_RUN}"
             }
         }
-        stage('Verify GitHub tag exists') {
+        stage('Verify GitHub release tag') {
             steps {
                 script {
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
+                        // Verify tag exists
                         def tagExists = sh(
                             returnStatus: true,
-                            script: 'gh api repos/${GH_OWNER}/${GH_REPO}/git/refs/tags/${GITHUB_TAG} > /dev/null 2>&1'
+                            script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} > /dev/null 2>&1"
                         )
                         if (tagExists != 0) {
-                            error("GitHub tag '${GITHUB_TAG}' does not exist in repository ${GH_OWNER}/${GH_REPO}")
+                            echo "DEBUG: Tag check failed, trying to get more info..."
+                            sh "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/git/refs/tags/${env.GITHUB_TAG} || true"
+                            error("GitHub tag '${env.GITHUB_TAG}' does not exist in repository ${env.GITHUB_OWNER}/${env.GITHUB_REPO}")
                         }
-                        echo "✓ Verified: GitHub tag '${GITHUB_TAG}' exists in ${GH_OWNER}/${GH_REPO}"
+
+                        // Determine if pre-release based on tag name (Maven convention: anything with a dash is pre-release)
+                        def tagVersion = env.GITHUB_TAG.replaceFirst(/^v/, '')  // Remove 'v' prefix if present
+                        def isPrereleaseByName = tagVersion.contains('-')
+
+                        // Try to fetch GitHub release to verify consistency
+                        def releaseJson = null
+                        try {
+                            releaseJson = sh(
+                                returnStdout: true,
+                                script: "gh api repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/releases/tags/${env.GITHUB_TAG}"
+                            ).trim()
+                        } catch (Exception e) {
+                            // No GitHub release exists - will handle below
+                        }
+
+                        if (releaseJson) {
+                            // GitHub release exists - verify it matches tag name convention
+                            def release = readJSON(text: releaseJson)
+                            def isPrereleaseByGithub = release.prerelease
+
+                            // Check for mismatch between tag name and GitHub release property
+                            if (isPrereleaseByName != isPrereleaseByGithub) {
+                                error("Inconsistent release configuration for tag '${env.GITHUB_TAG}':\n" +
+                                      "  Tag name indicates: ${isPrereleaseByName ? 'pre-release (contains dash)' : 'release (no dash)'}\n" +
+                                      "  GitHub release marked as: ${isPrereleaseByGithub ? 'pre-release' : 'release'}\n" +
+                                      "Please ensure tag naming and GitHub release settings are consistent.")
+                            }
+                            echo "✓ Verified: Tag name and GitHub release settings are consistent (${isPrereleaseByName ? 'pre-release' : 'release'})"
+                        } else {
+                            // No GitHub release exists - warn but continue based on tag name
+                            echo "⚠ Warning: No GitHub release found for tag '${env.GITHUB_TAG}' - validating based on tag name only"
+                        }
+
+                        // Check if tag matches environment requirements
+                        // Rule: Pre-release tags (with dash) cannot go to production
+                        //       Release tags (without dash) can go to any environment
+                        if (env.TARGET_ENV_LONG == 'production' && isPrereleaseByName) {
+                            error("Cannot deploy pre-release tag '${env.GITHUB_TAG}' to production. Only release tags (without dashes) are allowed.")
+                        }
+
+                        if (isPrereleaseByName) {
+                            echo "✓ Verified: '${env.GITHUB_TAG}' is a pre-release tag (allowed for ${env.TARGET_ENV_LONG})"
+                        } else {
+                            echo "✓ Verified: '${env.GITHUB_TAG}' is a release tag (allowed for any environment)"
+                        }
                     }
                 }
             }
@@ -95,7 +143,7 @@ pipeline {
             steps {
                 script {
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        sh 'gh repo clone ${GH_OWNER}/${GH_REPO} ${TMP_VOLUME} -- --branch=${GITHUB_TAG}'
+                        sh "gh repo clone ${env.GITHUB_OWNER}/${env.GITHUB_REPO} ${env.TMP_VOLUME} -- --branch=${env.GITHUB_TAG}"
                     }
                 }
             }
@@ -152,7 +200,7 @@ pipeline {
             steps {
                 script {
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'GH_TOKEN', password: env.GH_TOKEN]]]) {
-                        sh 'gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${LIQUIBASE_FRAMEWORK_PATH} -- --branch=${LIQUIBASE_FRAMEWORK_BRANCH}'
+                        sh "gh repo clone bcgov-nr/nrmcfs-liquibase-framework ${env.LIQUIBASE_FRAMEWORK_PATH} -- --branch=${env.LIQUIBASE_FRAMEWORK_BRANCH}"
                     }
                 }
             }
