@@ -53,13 +53,18 @@ pipeline {
         stage('Setup') {
             steps {
                 script {
+                    env.DRY_RUN = params.dryRun == true ? 'true' : 'false'
+                    env.ROLLBACK = params.rollback == true ? 'true' : 'false'
                     // Validate required parameters
                     if (!env.GITHUB_TAG || env.GITHUB_TAG.trim().isEmpty()) {
                         error("GITHUB_TAG parameter is required. Provide a Git tag to deploy (e.g., v1.2.3)")
                     }
                     // Set the build display name
-                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.githubTag} - ${params.envLong}"
-                    env.DRY_RUN = params.dryRun == true ? 'true' : 'false'
+                    def actionLabel = params.rollback == true ? 'Rollback' : 'Update'
+                    if (params.dryRun == true) {
+                        actionLabel = "${actionLabel} (Dry Run)"
+                    }
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.githubTag} - ${params.envLong} - ${actionLabel}"
                     env.CURRENT_DIR = sh(
                         returnStdout: true,
                         script: 'pwd'
@@ -73,6 +78,7 @@ pipeline {
                 echo "Liquibase search path: ${LIQUIBASE_SEARCH_PATH}"
                 echo "Liquibase framework path: ${LIQUIBASE_FRAMEWORK_PATH}"
                 echo "Dry run: ${env.DRY_RUN}"
+                echo "Rollback: ${env.ROLLBACK}"
             }
         }
         stage('Verify GitHub release tag') {
