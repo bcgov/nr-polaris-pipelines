@@ -74,7 +74,7 @@ pipeline {
                 echo "GitHub tag: ${GITHUB_TAG}"
             }
         }
-        stage('Scan for anomalies') {
+        stage('Run data scan') {
             steps {
                 script {
                     // open intention to get registry and db creds
@@ -98,55 +98,10 @@ pipeline {
                     intention.startAction("database")
                     podman = new Podman(this, null, env.AUTHFILE, "artifacts.developer.gov.bc.ca/cc20-gen-docker-local")
                     podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                    // Capture both output and exit code, masking VAULT_TOKEN
-                    def scanResult
+                    // Run scan and capture exit code (mask VAULT_TOKEN)
+                    def scanExitCode
                     wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'VAULT_TOKEN', password: env.VAULT_TOKEN]]]) {
-                        scanResult = sh(
-                            returnStdout: true,
-                            script: """
-                                set +e
-                                OUTPUT=\$(podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
-                                    -e VAULT_TOKEN=${env.VAULT_TOKEN} \
-                                    -e APP_ENV=${env.TARGET_ENV_SHORT} \
-                                    artifacts.developer.gov.bc.ca/cc20-gen-docker-local/${env.CONTAINER_IMAGE}:${env.GITHUB_TAG} \
-                                    --env ${env.TARGET_ENV_SHORT} --row-count-only)
-                                EXIT_CODE=\$?
-                                echo "\${OUTPUT}"
-                                echo "EXIT_CODE=\${EXIT_CODE}"
-                            """
-                        ).trim()
-                    }
-
-                    // Parse output and exit code
-                    def lines = scanResult.split('\n')
-                    def exitCodeLine = lines.find { it.startsWith('EXIT_CODE=') }
-                    def exitCode = exitCodeLine ? exitCodeLine.replace('EXIT_CODE=', '').toInteger() : -1
-                    env.rowCountOutput = lines.findAll { !it.startsWith('EXIT_CODE=') }.join('\n').trim()
-                    env.exitCode = exitCode.toString()
-
-                    echo "Anomaly row count: ${env.rowCountOutput}"
-                    echo "Container exit code: ${exitCode}"
-
-                    // Validate exit code
-                    if (exitCode == SCAN_EXIT_CODE_SUCCESS || exitCode == SCAN_EXIT_CODE_ANOMALIES) {
-                        echo "✓ Scan completed successfully (exit code ${exitCode})"
-                    } else if (exitCode == SCAN_EXIT_CODE_ERROR) {
-                        error("Scan failed with error exit code ${exitCode}")
-                    } else {
-                        error("Scan failed with unexpected exit code ${exitCode}")
-                    }
-                    intention.endAction("database")
-                }
-            }
-        }
-        stage('Display anomaly results') {
-            when { expression { env.exitCode?.toInteger() == SCAN_EXIT_CODE_ANOMALIES } }
-            steps {
-                script {
-                    // Display results and validate exit code (mask VAULT_TOKEN)
-                    def displayExitCode
-                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'VAULT_TOKEN', password: env.VAULT_TOKEN]]]) {
-                        displayExitCode = sh(
+                        scanExitCode = sh(
                             returnStatus: true,
                             script: """
                                 podman run --rm --authfile=${env.TMP_VOLUME}/${env.AUTHFILE} --security-opt label=disable --userns keep-id \
@@ -158,30 +113,33 @@ pipeline {
                         )
                     }
 
-                    echo "Display results exit code: ${displayExitCode}"
+                    echo "Scan exit code: ${scanExitCode}"
 
                     // Validate exit code
-                    if (displayExitCode == SCAN_EXIT_CODE_SUCCESS || displayExitCode == SCAN_EXIT_CODE_ANOMALIES) {
-                        echo "✓ Results displayed successfully (exit code ${displayExitCode})"
-                    } else if (displayExitCode == SCAN_EXIT_CODE_ERROR) {
-                        error("Display failed with error exit code ${displayExitCode}")
+                    if (scanExitCode == SCAN_EXIT_CODE_SUCCESS || scanExitCode == SCAN_EXIT_CODE_ANOMALIES) {
+                        echo "✓ Scan completed successfully (exit code ${scanExitCode})"
+                    } else if (scanExitCode == SCAN_EXIT_CODE_ERROR) {
+                        error("Scan failed with error exit code ${scanExitCode}")
                     } else {
-                        error("Display failed with unexpected exit code ${displayExitCode}")
+                        error("Scan failed with unexpected exit code ${scanExitCode}")
                     }
 
-                    // Send email notification about detected anomalies
-                    env.ANOMOLIES_MESSAGE = "Data scan detected ${env.rowCountOutput} anomalies in ${env.COMPONENT} (${env.TARGET_ENV_LONG})"
-                    sh """
-                        printf "\${BUILD_URL}\\n\\n\${ANOMOLIES_MESSAGE}" | mailx -s "Data quality issue detected" "${env.NOTIFICATION_RECIPIENTS}"
-                    """
-                    echo "✓ Email notification sent to ${env.NOTIFICATION_RECIPIENTS}"
+                    // Send email notification if anomalies detected
+                    if (scanExitCode == SCAN_EXIT_CODE_ANOMALIES) {
+                        env.ANOMOLIES_MESSAGE = "Data scan detected anomalies in ${env.COMPONENT} (${env.TARGET_ENV_LONG})"
+                        sh """
+                            printf "\${BUILD_URL}\\n\\n\${ANOMOLIES_MESSAGE}" | mailx -s "Data quality issue detected" "${env.NOTIFICATION_RECIPIENTS}"
+                        """
+                        echo "✓ Email notification sent to ${env.NOTIFICATION_RECIPIENTS}"
+                    }
+
+                    intention.endAction("database")
                 }
             }
         }
         stage('Podman logout') {
             steps {
                 script {
-                    intention.endAction("database")
                     podman.logout(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}")
                 }
             }
