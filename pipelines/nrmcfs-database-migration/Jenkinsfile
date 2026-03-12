@@ -32,7 +32,6 @@ pipeline {
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
         CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.21.1"
         PODMAN_USER = "wwwadm"
-        NR_BROKER_TOKEN = credentials('nr-broker-jwt')
         AUTHFILE = "auth.json"
         DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
     }

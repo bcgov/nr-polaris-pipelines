@@ -32,9 +32,7 @@ pipeline {
         PODMAN_REGISTRY = "docker.io"
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template:0.41.3"
         PODMAN_USER = "wwwadm"
-        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
-        NR_BROKER_TOKEN = credentials('nr-broker-jwt')
-        DB_ROLE_ID = credentials("knox-${params.project}-${params.component}-${env_short}-role-id")
+        NR_BROKER_TOKEN = credentials("nr-${params.project}-broker-jwt")
         AUTHFILE = "auth.json"
         NOTIFICATION_RECIPIENTS = "${params.notificationRecipients}"
     }
@@ -89,12 +87,12 @@ pipeline {
                     )
                     intention.open()
                     intention.startAction("login")
-                    def vaultToken = intention.provisionToken("login", env.NR_DATABASE_MIGRATION_ROLE_ID)
+                    def vaultToken = intention.provisionToken("login")
                     def vault = new Vault(vaultToken)
                     def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
-                    env.VAULT_TOKEN = intention.provisionToken("database", env.DB_ROLE_ID)
+                    env.VAULT_TOKEN = intention.provisionToken("database")
                     intention.startAction("database")
                     podman = new Podman(this, null, env.AUTHFILE, "artifacts.developer.gov.bc.ca/cc20-gen-docker-local")
                     podman.login(authfile: "${env.TMP_VOLUME}/${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")

@@ -32,9 +32,7 @@ pipeline {
         CONTAINER_IMAGE_CONSUL_TEMPLATE = "hashicorp/consul-template"
         CONTAINER_IMAGE_LIQUBASE = "liquibase/liquibase:4.33.0"
         PODMAN_USER = "wwwadm"
-        NR_DATABASE_MIGRATION_ROLE_ID = credentials('knox-nr-database-migration-tools-role-id')
-        NR_BROKER_TOKEN = credentials('nr-broker-jwt')
-        DB_ROLE_ID = credentials("knox-${params.serviceProject}-${params.serviceName}-${env_short}-role-id")
+        NR_BROKER_TOKEN = credentials("nr-${params.serviceProject}-broker-jwt")
         AUTHFILE = "auth.json"
     }
     stages {
@@ -79,7 +77,7 @@ pipeline {
                     )
                     intention.open()
                     intention.startAction("login")
-                    def vaultGhToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
+                    def vaultGhToken = intention.provisionToken("login")
                     def vaultGhApp = new Vault(vaultGhToken)
                     def ghAppCreds = vaultGhApp.read("apps/data/tools/db-pipeline/nr-database-migration/github_app")
                     env.APP_ID = ghAppCreds['gh_app_id']
@@ -159,12 +157,12 @@ pipeline {
                     )
                     intention.open()
                     intention.startAction("login")
-                    def vaultToken = intention.provisionToken("login", NR_DATABASE_MIGRATION_ROLE_ID)
+                    def vaultToken = intention.provisionToken("login")
                     def vault = new Vault(vaultToken)
                     def registryCreds = vault.read('apps/data/tools/db-pipeline/nr-database-migration/artifactory')
                     env.REGISTRY_USERNAME = registryCreds['sa_username']
                     env.REGISTRY_PASSWORD = registryCreds['sa_password']
-                    env.APP_VAULT_TOKEN = intention.provisionToken("database", DB_ROLE_ID)
+                    env.APP_VAULT_TOKEN = intention.provisionToken("database")
                     sh "cp scripts/config.hcl ${TMP_VOLUME}/config.hcl"
                     sh "chmod -R 775 ${TMP_VOLUME}"
                     podman = new Podman(this, null)

@@ -100,7 +100,6 @@ pipeline {
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 CAUSE_USER_ID = "${params.userId != null && params.userId != "" ? params.userId : "github@internal"}"
-                CONFIG_ROLE_ID = credentials("knox-jasper-jasper-reports-${params.jasperServerInstance}-prod-role-id")
             }
             steps {
                 script {
@@ -119,7 +118,7 @@ pipeline {
                         )
                         intention.open()
                         intention.startAction("login")
-                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                        def vaultToken = intention.provisionToken("login")
                         def vault = new Vault(vaultToken)
                         vault.readToObject("apps/data/prod/jasper/jasper-reports-${params.jasperServerInstance}/artifactory", env)
                         vault.readToObject("apps/data/prod/jasper/jasper-reports-${params.jasperServerInstance}/${env.ENV_SHORT}", env, keyTransform: { key -> 'PODMAN_' + key })
@@ -132,7 +131,7 @@ pipeline {
                         } catch (Exception e) {
                             echo "ROLE ID not found - continue without it"
                         }
-                        def vaultAppToken = intention.provisionToken("configure", appRoleId)
+                        def vaultAppToken = intention.provisionToken("configure")
                         def vaultApp = new Vault(vaultAppToken)
                         vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
                         intention.openResponse.actions.each { key, value ->
