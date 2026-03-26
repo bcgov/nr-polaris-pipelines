@@ -68,6 +68,7 @@ pipeline {
                             env.GITHUB_TOKEN = "${params.githubToken}"
                             wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                                 sh '''
+                                    [ -d app ] && rm -rf app
                                     git config --global advice.detachedHead false
                                     git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                     cd app
@@ -81,6 +82,7 @@ pipeline {
                             }
                         } else {
                             sh '''
+                                [ -d app ] && rm -rf app
                                 git config --global advice.detachedHead false
                                 git clone -q --no-checkout https://${GIT_REPO} app
                                 cd app
