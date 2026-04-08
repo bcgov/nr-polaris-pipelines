@@ -187,7 +187,7 @@ pipeline {
                 INTENTION_ID = "${params.intentionId}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                PODMAN_PLAYBOOKS_PATH = "downloads/deploy/${env.CATALOG_INFO_PATH}/playbooks"}"
+                PODMAN_PLAYBOOKS_PATH = "downloads/deploy/${env.CATALOG_INFO_PATH}/playbooks"
             }
             steps {
                 script {
