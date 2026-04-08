@@ -39,6 +39,9 @@ pipeline {
     agent none
     stages {
         stage('Initialize') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
             steps {
                 script {
                     // Set the build display name
