@@ -145,7 +145,7 @@ pipeline {
             }
             environment {
                 ARTIFACT_URL = "${params.artifactUrl}"
-                ARTIFACT_SRC =" ${params.artifactSrc}"
+                ARTIFACT_SRC = "${params.artifactSrc}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
                 GITHUB_USER = "${params.githubUser}"
                 GITHUB_TOKEN = "${params.githubToken}"
