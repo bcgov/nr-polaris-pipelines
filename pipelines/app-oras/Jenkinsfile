@@ -167,13 +167,13 @@ pipeline {
                         script: '''
                             cd downloads/app
                             output=$(/sw_ux/bin/oras pull ${ARTIFACT_URL} --format go-template='{{toRawJson .}}' > ./oras_output.json 2>/dev/null)
-                            sha256=$(sha256sum ./oras_output.json | awk '{print $1}')
+                            sha256=$(cat ./oras_output.json | jq -r '.content.layers | map(.digest) | join(",")' | sha256sum | awk '{print $1}')
                             echo "${sha256}"
                             rm -f ./oras_output.json
                         '''
                     )
 
-                    if (artifact_sha256.trim() != ARTIFACT_SHA256.trim()) {
+                    if ("sha256:${artifact_sha256.trim()}" != "${ARTIFACT_SHA256.trim()}") {
                         error "Checksum verification failed!"
                     } else {
                         echo "Checksum verification passed!"
