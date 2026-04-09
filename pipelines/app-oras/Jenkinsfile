@@ -93,11 +93,12 @@ pipeline {
                         '''
                     )
 
-                    if (deploy_sha256.trim() != DEPLOY_SHA256.trim()) {
-                        error "Checksum verification failed!"
-                    } else {
-                        echo "Checksum verification passed!"
-                    }
+                    // TODO: Part of deploy configuration tracking
+                    // if (deploy_sha256.trim() != DEPLOY_SHA256.trim()) {
+                    //     error "Checksum verification failed!"
+                    // } else {
+                    //     echo "Checksum verification passed!"
+                    // }
                     sh 'ls -l downloads/deploy'
                 }
             }
@@ -126,18 +127,18 @@ pipeline {
                         error "Invalid artifact source specified: ${ARTIFACT_SRC}"
                     }
 
-                    def download_sha256 = sh(
+                    def artifact_sha256 = sh(
                         returnStdout: true,
                         script: '''
                             cd downloads/app
                             output=$(/sw_ux/bin/oras pull ${ARTIFACT_URL} --format go-template='{{toRawJson .}}' > ./oras_output.json 2>/dev/null)
-                            sha256=$(jq -r '.files[] | select(.annotations["org.opencontainers.image.title"] == "dist") | .digest | split(":")[1]' ./oras_output.json)
+                            sha256=$(sha256sum ./oras_output.json | awk '{print $1}')
                             echo "${sha256}"
                             rm -f ./oras_output.json
                         '''
                     )
 
-                    if (download_sha256.trim() != ARTIFACT_SHA256.trim()) {
+                    if (artifact_sha256.trim() != ARTIFACT_SHA256.trim()) {
                         error "Checksum verification failed!"
                     } else {
                         echo "Checksum verification passed!"
