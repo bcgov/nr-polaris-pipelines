@@ -154,9 +154,9 @@ pipeline {
                 script {
                     echo 'NR POLARIS - Download app package'
 
-                    if (ARTIFACT_SRC == 'repo' || ARTIFACT_SRC == 'github') {
+                    if (env.ARTIFACT_SRC == 'repo' || env.ARTIFACT_SRC == 'github') {
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
-                    } else if (ARTIFACT_SRC == 'artifactory') {
+                    } else if (env.ARTIFACT_SRC == 'artifactory') {
                         sh 'echo ${ARTIFACTORY_PASSWORD} | /sw_ux/bin/oras login ${ARTIFACTORY_URL} -u ${ARTIFACTORY_USERNAME} --password-stdin'
                     } else {
                         error "Invalid artifact source specified: ${ARTIFACT_SRC}"
