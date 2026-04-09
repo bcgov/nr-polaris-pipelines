@@ -122,7 +122,7 @@ pipeline {
 
                     def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
 
-                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "downloads/deploy/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                     if (env.ENV_SHORT == 'dev') {
                         env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
                     } else if (env.ENV_SHORT == 'test') {
