@@ -12,12 +12,12 @@ def podman
  * - projectVersion: Display/build package version and deployment metadata version.
  * - envLong: Target environment (dev, test, production).
  * - deployUrl: ORAS reference for deployment configuration package.
+ * - deployRoot: Deployment configuration root path within the ORAS package (default: .).
  * - artifactUrl: ORAS reference for application package.
  * - artifactSrc: Artifact registry type (github or artifactory).
  * - artifactSha256: Expected SHA256 digest for deploy/app ORAS content.
  * - githubUser: Username for GHCR login.
  * - githubToken: Token for GHCR login.
- * - catalogInfoPath: Relative path in deploy package to catalog-info.yaml (default: .).
  * - eventProvider: Event source/provider name sent to Broker.
  * - githubRunId: External workflow run id used in trigger metadata.
  * - triggerUrl: External workflow/job URL used in trigger metadata.
@@ -30,7 +30,7 @@ def podman
  * - testInventoryPath: Inventory file path for test deployments.
  * - prodInventoryPath: Inventory file path for production deployments.
  *
- * Project/component are derived from ${catalogInfoPath}/catalog-info.yaml:
+ * Project/component are derived from catalog-info.yaml at the root of the deploy package
  * - project: spec.system
  * - component: metadata.name
  */
@@ -42,10 +42,43 @@ pipeline {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
+            environment {
+                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
+                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                TRIGGER_URL = "${params.triggerUrl}"
+                ENV_LONG = "${params.envLong}"
+            }
             steps {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
+
+                    def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
+                    env.PROJECT = catalogInfo.spec.system
+                    env.COMPONENT = catalogInfo.metadata.name
+
+                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                    if (env.ENV_SHORT == 'dev') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
+                    } else if (env.ENV_SHORT == 'test') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
+                    } else if (env.ENV_SHORT == 'prod') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
+                    }
+                    intention.setEventDetails(
+                        userName: env.DEPLOYMENT_APPROVER,
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        triggerId: triggerId,
+                        triggerUrl: env.TRIGGER_URL,
+                        environment: env.ENV_LONG,
+                        packageInstallationVersion: "${params.projectVersion}",
+                        packageInstallationSourceIntention: "${params.intentionId}"
+                    )
+                    intention.open()
 
                     // Clean up any existing files in the downloads directory and create necessary subdirectories
                     sh 'rm -rf downloads ; mkdir -p downloads/app ; mkdir -p downloads/deploy'
@@ -174,9 +207,8 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                CATALOG_INFO_PATH = "${params.catalogInfoPath != null && params.catalogInfoPath != "" ? params.catalogInfoPath : "."}"
+                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
                 ENV_LONG = "${params.envLong}"
-                EVENT_PROVIDER = "${params.eventProvider}"
                 GITHUB_RUNID= "${params.githubRunId}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
@@ -187,22 +219,19 @@ pipeline {
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
                 AUTHFILE = "auth.json"
-                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                PODMAN_PLAYBOOKS_PATH = "downloads/deploy/${env.CATALOG_INFO_PATH}/playbooks"
+                PODMAN_PLAYBOOKS_PATH = "downloads/deploy/${env.DEPLOY_ROOT}/playbooks"
             }
             steps {
                 script {
                     try {
                         echo "Deploy to ${env.ENV_LONG} environment"
-                        def catalogInfo = readYaml file: "downloads/deploy/${env.CATALOG_INFO_PATH}/catalog-info.yaml"
+                        def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
                         env.PROJECT = catalogInfo.spec.system
                         env.COMPONENT = catalogInfo.metadata.name
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
-                        def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
-                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                         if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
                         } else if (env.ENV_SHORT == 'test') {
@@ -210,17 +239,6 @@ pipeline {
                         } else if (env.ENV_SHORT == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
                         }
-                        intention.setEventDetails(
-                            userName: env.DEPLOYMENT_APPROVER,
-                            url: env.BUILD_URL,
-                            provider: env.EVENT_PROVIDER,
-                            triggerId: triggerId,
-                            triggerUrl: env.TRIGGER_URL,
-                            environment: env.ENV_LONG,
-                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
-                            packageInstallationSourceIntention: env.INTENTION_ID
-                        )
-                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -249,7 +267,7 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
-                        def appMountPath = "\$(pwd)/downloads/deploy/${env.CATALOG_INFO_PATH}/playbooks"
+                        def appMountPath = "\$(pwd)/downloads/deploy/${env.DEPLOY_ROOT}/playbooks"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
