@@ -42,43 +42,10 @@ pipeline {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
-            environment {
-                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
-                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
-                EVENT_PROVIDER = "${params.eventProvider}"
-                TRIGGER_URL = "${params.triggerUrl}"
-                ENV_LONG = "${params.envLong}"
-            }
             steps {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
-
-                    def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
-                    env.PROJECT = catalogInfo.spec.system
-                    env.COMPONENT = catalogInfo.metadata.name
-
-                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
-
-                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
-                    if (env.ENV_SHORT == 'dev') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
-                    } else if (env.ENV_SHORT == 'test') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
-                    } else if (env.ENV_SHORT == 'prod') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
-                    }
-                    intention.setEventDetails(
-                        userName: env.DEPLOYMENT_APPROVER,
-                        url: env.BUILD_URL,
-                        provider: env.EVENT_PROVIDER,
-                        triggerId: triggerId,
-                        triggerUrl: env.TRIGGER_URL,
-                        environment: env.ENV_LONG,
-                        packageInstallationVersion: "${params.projectVersion}",
-                        packageInstallationSourceIntention: "${params.intentionId}"
-                    )
-                    intention.open()
 
                     // Clean up any existing files in the downloads directory and create necessary subdirectories
                     sh 'rm -rf downloads ; mkdir -p downloads/app ; mkdir -p downloads/deploy'
@@ -136,7 +103,47 @@ pipeline {
                 }
             }
         }
+        stage('Open Intention') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            environment {
+                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
+                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                TRIGGER_URL = "${params.triggerUrl}"
+                ENV_LONG = "${params.envLong}"
+            }
+            steps {
+                script {
+                    def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
+                    env.PROJECT = catalogInfo.spec.system
+                    env.COMPONENT = catalogInfo.metadata.name
 
+                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                    if (env.ENV_SHORT == 'dev') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
+                    } else if (env.ENV_SHORT == 'test') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
+                    } else if (env.ENV_SHORT == 'prod') {
+                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
+                    }
+                    intention.setEventDetails(
+                        userName: env.DEPLOYMENT_APPROVER,
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        triggerId: triggerId,
+                        triggerUrl: env.TRIGGER_URL,
+                        environment: env.ENV_LONG,
+                        packageInstallationVersion: "${params.projectVersion}",
+                        packageInstallationSourceIntention: "${params.intentionId}"
+                    )
+                    intention.open()
+                }
+            }
+        }
         stage('Download app package') {
             agent {
                 label Podman.AGENT_LABEL_APP
