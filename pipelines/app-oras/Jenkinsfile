@@ -99,7 +99,7 @@ pipeline {
                     // } else {
                     //     echo "Checksum verification passed!"
                     // }
-                    sh 'ls -l downloads/deploy'
+                    sh 'ls -al downloads/deploy'
                 }
             }
         }
@@ -113,6 +113,8 @@ pipeline {
                 EVENT_PROVIDER = "${params.eventProvider}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 ENV_LONG = "${params.envLong}"
+                INTENTION_ID = "${params.intentionId}"
+                PROJECT_VERSION = "${params.projectVersion}"
             }
             steps {
                 script {
@@ -123,13 +125,6 @@ pipeline {
                     def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
 
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "downloads/deploy/.jenkins/${env.COMPONENT}-deployment-intention.json"))
-                    if (env.ENV_SHORT == 'dev') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
-                    } else if (env.ENV_SHORT == 'test') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
-                    } else if (env.ENV_SHORT == 'prod') {
-                        env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
-                    }
                     intention.setEventDetails(
                         userName: env.DEPLOYMENT_APPROVER,
                         url: env.BUILD_URL,
@@ -137,8 +132,8 @@ pipeline {
                         triggerId: triggerId,
                         triggerUrl: env.TRIGGER_URL,
                         environment: env.ENV_LONG,
-                        packageInstallationVersion: "${params.projectVersion}",
-                        packageInstallationSourceIntention: "${params.intentionId}"
+                        packageInstallationVersion: env.PROJECT_VERSION,
+                        packageInstallationSourceIntention: env.INTENTION_ID
                     )
                     intention.open()
                 }
@@ -183,7 +178,7 @@ pipeline {
                     } else {
                         echo "Checksum verification passed!"
                     }
-                    sh 'ls -l downloads/app'
+                    sh 'ls -al downloads/app'
                 }
             }
         }
