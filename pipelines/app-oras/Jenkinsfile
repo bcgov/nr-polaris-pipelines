@@ -87,7 +87,7 @@ pipeline {
                         script: '''
                             cd downloads/deploy
                             output=$(/sw_ux/bin/oras pull ${DEPLOY_URL} --format go-template='{{toRawJson .}}' > ./oras_output.json 2>/dev/null)
-                            sha256=$(jq -r '.files[] | select(.annotations["org.opencontainers.image.title"] == "dist") | .digest | split(":")[1]' ./oras_output.json)
+                            sha256=$(sha256sum ./oras_output.json | awk '{print $1}')
                             echo "${sha256}"
                             rm -f ./oras_output.json
                         '''
@@ -119,7 +119,7 @@ pipeline {
                 script {
                     echo 'NR POLARIS - Download app package'
 
-                    if (ARTIFACT_SRC == 'github') {
+                    if (ARTIFACT_SRC == 'repo' || ARTIFACT_SRC == 'github') {
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     } else if (ARTIFACT_SRC == 'artifactory') {
                         sh 'echo ${ARTIFACTORY_PASSWORD} | /sw_ux/bin/oras login ${ARTIFACTORY_URL} -u ${ARTIFACTORY_USERNAME} --password-stdin'
