@@ -172,8 +172,6 @@ pipeline {
                             rm -f ./oras_output.json
                         '''
                     )
-                    sh 'ls -al downloads/app'
-                    sh 'cat downloads/app/oras_output.json'
 
                     if ("sha256:${artifact_sha256.trim()}" != "${ARTIFACT_SHA256.trim()}") {
                         error "Checksum verification failed!"
