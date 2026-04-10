@@ -278,7 +278,7 @@ pipeline {
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v ${appMountPath}:/ansible/app \
+                                -v ${appMountPath}:/ansible/app/playbooks \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
                                 -v \$(pwd)/downloads/app:/ansible/downloads \
