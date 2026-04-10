@@ -111,6 +111,7 @@ pipeline {
                 DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
                 DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
                 EVENT_PROVIDER = "${params.eventProvider}"
+                GITHUB_RUNID= "${params.githubRunId}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 ENV_LONG = "${params.envLong}"
                 INTENTION_ID = "${params.intentionId}"
@@ -211,7 +212,6 @@ pipeline {
             environment {
                 DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
                 ENV_LONG = "${params.envLong}"
-                GITHUB_RUNID= "${params.githubRunId}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
