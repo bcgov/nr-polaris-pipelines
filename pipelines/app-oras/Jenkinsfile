@@ -76,11 +76,11 @@ pipeline {
                 DEPLOY_URL = "${params.deployUrl}"
                 DEPLOY_SHA256 = "${params.artifactSha256}"
                 GITHUB_USER = "${params.githubUser}"
-                GITHUB_TOKEN = "${params.githubToken}"
             }
             steps {
                 script {
                     echo 'NR POLARIS - Download deployment configuration package'
+                    env.GITHUB_TOKEN = params.githubToken
                     sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     def deploy_sha256 = sh(
                         returnStdout: true,
@@ -149,13 +149,13 @@ pipeline {
                 ARTIFACT_SRC = "${params.artifactSrc}"
                 ARTIFACT_SHA256 = "${params.artifactSha256}"
                 GITHUB_USER = "${params.githubUser}"
-                GITHUB_TOKEN = "${params.githubToken}"
             }
             steps {
                 script {
                     echo 'NR POLARIS - Download app package'
 
                     if (env.ARTIFACT_SRC == 'repo' || env.ARTIFACT_SRC == 'github') {
+                        env.GITHUB_TOKEN = params.githubToken
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     } else if (env.ARTIFACT_SRC == 'artifactory') {
                         sh 'echo ${ARTIFACTORY_PASSWORD} | /sw_ux/bin/oras login ${ARTIFACTORY_URL} -u ${ARTIFACTORY_USERNAME} --password-stdin'
