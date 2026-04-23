@@ -1,0 +1,341 @@
+@Library('polaris@v2.0.0')
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.Vault
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+
+def intention
+def podman
+
+pipeline {
+    agent none
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    // Set the build display name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
+                }
+            }
+        }
+        stage('Banner') {
+            steps {
+	            script {
+                    echo "==================="
+                    echo "NR Polaris Pipeline"
+                    echo "==================="
+                    echo ""
+                    echo "Standard on-premise maven artifact application deployment pipeline"
+                    echo ""
+                    echo "Jenkinsfile: https://github.com/bcgov-nr/polaris-pipelines/blob/main/pipelines/app-maven"
+                    echo "Ansible Polaris collection: https://github.com/bcgov/nr-polaris-collection"
+                    echo ""
+                    echo "Developers are expected to review the documentation of all roles used by their Ansible playbook file."
+                }
+            }
+        }
+        stage('Checkout app and download package') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            environment {
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
+                GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
+                ARTIFACT_SHA256 = "${params.artifactSha256}"
+                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
+                PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+            }
+            steps {
+                script {
+                    echo 'NR POLARIS - Checkout app and download package'
+                    echo "GIT_BRANCH: ${GIT_BRANCH}"
+                    sh 'rm -rf app'
+                    sh 'rm -rf downloads ; mkdir downloads'
+                    def package_download_retries = 2;
+                    def package_download_retry_counter = 0;
+                    retry (package_download_retries) {
+                        if (package_download_retry_counter > 0) {
+                            echo 'Wait 10 seconds before retry …'
+                            sleep 10
+                        }
+                        package_download_retry_counter += 1
+
+                        if (env.GITHUB_PRIVATE_REPO) {
+                            env.GITHUB_USER = "${params.githubUser}"
+                            env.GITHUB_TOKEN = "${params.githubToken}"
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
+                                sh '''
+                                    [ -d app ] && rm -rf app
+                                    git config --global advice.detachedHead false
+                                    git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
+                                    cd app
+                                    git sparse-checkout init --cone
+                                    git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                                    git checkout ${GIT_BRANCH}
+                                '''
+                                if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
+                                    sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
+                                }
+                            }
+                        } else {
+                            sh '''
+                                [ -d app ] && rm -rf app
+                                git config --global advice.detachedHead false
+                                git clone -q --no-checkout https://${GIT_REPO} app
+                                cd app
+                                git sparse-checkout init --cone
+                                git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                                git checkout ${GIT_BRANCH}
+                            '''
+                            if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
+                                sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
+                            }
+                        }
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
+                            def downloaded_artifact_sha256 = sh(
+                                returnStdout: true,
+                                script: '''
+                                    ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                    cd downloads
+                                    sha256=($(sha256sum "${ARTIFACT_NAME}"))
+                                    echo "${sha256}"
+                                '''
+                            )
+                            if (downloaded_artifact_sha256.trim() == ARTIFACT_SHA256.trim()) {
+                                echo "SHA256 checksum matches!"
+                            } else {
+                                echo "SHA256 checksum failed"
+                                if (package_download_retry_counter == package_download_retries) {
+                                    currentBuild.result = 'FAILURE'
+                                }
+                                error('Quitting')
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Checkout INFRA dev-all-in-one') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "release/1.0.0"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [
+                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "infra"]
+                    ],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [
+                        [
+                            credentialsId: 'ci-user',
+                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
+                        ]
+                    ]
+                ])
+            }
+        }
+        stage('Deploy to environment') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            environment {
+                PROJECT = "${params.project}"
+                COMPONENT = "${params.component}"
+                GIT_REPO = "${params.gitRepo}"
+                GIT_BRANCH = "${params.gitBranch}"
+                ENV_LONG = "${params.envLong}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                GITHUB_RUNID= "${params.githubRunId}"
+                TRIGGER_URL = "${params.triggerUrl}"
+                HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v3.5.0"}"
+                PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
+                PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
+                GIT_CREDS = credentials('ci-user')
+                GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
+                CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
+                AUTHFILE = "auth.json"
+                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
+                INTENTION_ID = "${params.intentionId}"
+                DOWNLOAD_URL = "${params.downloadUrl}"
+                DOWNLOAD_TYPE =" ${params.downloadType}"
+                PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
+                PODMAN_PROJECT_VERSION = "${params.projectVersion}"
+                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
+            }
+            steps {
+                script {
+                    try {
+                        echo "Deploy to ${env.ENV_LONG} environment"
+                        env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
+                        def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                        if (env.ENV_SHORT == 'dev') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
+                        } else if (env.ENV_SHORT == 'test') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = params.testInventoryPath
+                        } else if (env.ENV_SHORT == 'prod') {
+                            env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
+                        }
+                        intention.setEventDetails(
+                            userName: env.DEPLOYMENT_APPROVER,
+                            url: env.BUILD_URL,
+                            provider: env.EVENT_PROVIDER,
+                            triggerId: triggerId,
+                            triggerUrl: env.TRIGGER_URL,
+                            environment: env.ENV_LONG,
+                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
+                            packageInstallationSourceIntention: env.INTENTION_ID
+                        )
+                        intention.open()
+                        intention.startAction("login")
+                        def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
+                        def vault = new Vault(vaultToken)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/jdk_cacerts_pass", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/artifactory", env)
+                        vault.readToObject("apps/data/prod/jenkins/jenkins-apps/cdua", env)
+                        env.PODMAN_BUILD_NUMBER = env.BUILD_NUMBER
+                        env.PODMAN_BUILD_URL = env.BUILD_URL
+                        def appRoleId = null
+                        try {
+                            withCredentials([string(credentialsId: "knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
+                                appRoleId = env.APP_ROLE_ID
+                            }
+                        } catch (Exception e) {
+                            echo "Provisioning without AppRole RoleID (Jenkins credential: knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id)"
+                            echo "Broker Account must be configured with 'Require RoleId: No'"
+                        }
+                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
+                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
+                                sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l * ; cd ..'
+                            }
+                        }
+                        env.PODMAN_ARTIFACT_NAME = sh(
+                            returnStdout: true,
+                            script: '''
+                                ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
+                                echo -n "${ARTIFACT_NAME}"
+                            '''
+                        )
+                        def downloaded_artifact_sha256 = sh(
+                            returnStdout: true,
+                            script: '''
+                                cd downloads
+                                sha256=($(sha256sum "${PODMAN_ARTIFACT_NAME}"))
+                                echo "${sha256}"
+                            '''
+                        )
+                        if (downloaded_artifact_sha256.trim() == PODMAN_ARTIFACT_SHA256.trim()) {
+                            echo "SHA256 checksum matches!"
+                        } else {
+                            echo "SHA256 checksum failed"
+                            currentBuild.result = 'FAILURE'
+                            error('Quitting')
+                        }
+                        intention.startAction("configure")
+                        def vaultAppToken = intention.provisionToken("configure", appRoleId)
+                        def vaultApp = new Vault(vaultAppToken)
+                        vaultApp.readToObject("apps/data/${env.ENV_SHORT}/${env.PROJECT}/${env.COMPONENT}/${env.ENV_LONG}", env, keyTransform: { key -> 'PODMAN_' + key })
+                        vaultApp.revokeToken()
+                        intention.endAction("configure")
+                        intention.startAction("install")
+                        intention.openResponse.actions.each { key, value ->
+                            env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
+                        }
+                        podman = new Podman(this)
+                        def appMountPath
+                        if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
+                            appMountPath = "\$(pwd)/app"
+                        } else if (env.PODMAN_SOURCE_ROOT != "." && env.PODMAN_SOURCE_ROOT != "") {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
+                        } else {
+                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
+                            appMountPath = "\$(pwd)/app/${serviceDir}"
+                        }
+                        podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd):/ansible -e PODMAN_*",
+                            command: '/bin/sh -c "git config --global advice.detachedHead false && ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}"')
+                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                            authfile: "${env.AUTHFILE}",
+                            options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
+                                -v ${appMountPath}:/ansible/app \
+                                -v \$(pwd)/infra/inventory:/ansible/inventory \
+                                -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
+                                -v \$(pwd)/downloads:/ansible/downloads \
+                                -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
+                            command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
+                                app/playbooks/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
+                        podman.logout(authfile: "${env.AUTHFILE}")
+                        intention.endAction("install")
+                        vault.revokeToken()
+                        intention.endAction("login")
+                        println intention.close(true)
+                        intention = null
+                    } catch (IllegalStateException ex) {
+                        echo "IllegalStateException occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    } catch (IllegalArgumentException ex) {
+                        echo "IllegalArgumentException occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    } catch (Exception ex) {
+                        echo "Other exception occurred: $ex"
+                        currentBuild.result = 'FAILURE'
+                        error('Quitting')
+                    }
+                }
+            }
+        }
+    }
+    post {
+        unstable {
+            node(Podman.AGENT_LABEL_APP) {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        failure {
+            node(Podman.AGENT_LABEL_APP) {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        aborted {
+            node(Podman.AGENT_LABEL_APP) {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        always {
+            node(Podman.AGENT_LABEL_APP) {
+                cleanWs(
+                    cleanWhenAborted: true,
+                    cleanWhenFailure: false,
+                    cleanWhenSuccess: true,
+                    cleanWhenUnstable: false,
+                    deleteDirs: true
+                )
+            }
+        }
+    }
+}
