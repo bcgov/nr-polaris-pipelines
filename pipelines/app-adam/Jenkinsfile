@@ -78,10 +78,6 @@ pipeline {
                                 '''
                                 if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                     sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
-                                } else if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
-                                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
-                                        sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
-                                    }
                                 }
                             }
                         } else {
@@ -96,10 +92,6 @@ pipeline {
                             '''
                             if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
                                 sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
-                            } else if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
-                                wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.REGISTRY_USERNAME, password: REGISTRY_USERNAME],[var: env.REGISTRY_PASSWORD, password: REGISTRY_PASSWORD]]]) {
-                                    sh 'cd downloads ; curl -u "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" -LO "${DOWNLOAD_URL}" ; ls -l *; cd ..'
-                                }
                             }
                         }
                         if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
@@ -118,25 +110,6 @@ pipeline {
                                 echo "SHA256 checksum failed"
                                 if (package_download_retry_counter == package_download_retries) {
                                     currentBuild.result = 'FAILURE'
-                                }
-                                error('Quitting')
-                            }
-                        } else if (DOWNLOAD_TYPE.toUpperCase().trim() == 'ARTIFACTORY') {
-                            def downloaded_artifact_sha256 = sh(
-                                returnStdout: true,
-                                script: '''
-                                    ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
-                                    cd downloads
-                                    sha256=($(sha256sum "${ARTIFACT_NAME}"))
-                                    echo "${sha256}"
-                                '''
-                            )
-                            if (downloaded_artifact_sha256.trim() == ARTIFACT_SHA256.trim()) {
-                                echo "SHA256 checksum matches!"
-                            } else {
-                                echo "SHA256 checksum failed"
-                                if (package_download_retry_counter == package_download_retries) {
-                                    currenBuild.result = 'FAILURE'
                                 }
                                 error('Quitting')
                             }
