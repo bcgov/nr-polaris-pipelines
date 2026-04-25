@@ -42,9 +42,6 @@ pipeline {
                 GIT_REPO = "${params.gitRepo}"
                 GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
                 GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
-                DOWNLOAD_TYPE =" ${params.downloadType}"
-                ARTIFACT_SHA256 = "${params.artifactSha256}"
                 SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
                 PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
             }
@@ -54,66 +51,30 @@ pipeline {
                     echo "GIT_BRANCH: ${GIT_BRANCH}"
                     sh 'rm -rf app'
                     sh 'rm -rf downloads ; mkdir downloads'
-                    def package_download_retries = 2;
-                    def package_download_retry_counter = 0;
-                    retry (package_download_retries) {
-                        if (package_download_retry_counter > 0) {
-                            echo 'Wait 10 seconds before retry …'
-                            sleep 10
-                        }
-                        package_download_retry_counter += 1
-
-                        if (env.GITHUB_PRIVATE_REPO) {
-                            env.GITHUB_USER = "${params.githubUser}"
-                            env.GITHUB_TOKEN = "${params.githubToken}"
-                            wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                                sh '''
-                                    [ -d app ] && rm -rf app
-                                    git config --global advice.detachedHead false
-                                    git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
-                                    cd app
-                                    git sparse-checkout init --cone
-                                    git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
-                                    git checkout ${GIT_BRANCH}
-                                '''
-                                if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
-                                    sh 'cd downloads ; curl -LO "${DOWNLOAD_URL}" -H "Authorization: token ${GITHUB_TOKEN}"'
-                                }
-                            }
-                        } else {
+                    if (env.GITHUB_PRIVATE_REPO) {
+                        env.GITHUB_USER = "${params.githubUser}"
+                        env.GITHUB_TOKEN = "${params.githubToken}"
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                             sh '''
                                 [ -d app ] && rm -rf app
                                 git config --global advice.detachedHead false
-                                git clone -q --no-checkout https://${GIT_REPO} app
+                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
                                 cd app
                                 git sparse-checkout init --cone
                                 git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
                                 git checkout ${GIT_BRANCH}
                             '''
-                            if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
-                                sh 'cd downloads ; curl -LO ${DOWNLOAD_URL}'
-                            }
                         }
-                        if (DOWNLOAD_TYPE.toUpperCase().trim() == 'GITHUB') {
-                            def downloaded_artifact_sha256 = sh(
-                                returnStdout: true,
-                                script: '''
-                                    ARTIFACT_NAME=$(echo ${DOWNLOAD_URL##*/})
-                                    cd downloads
-                                    sha256=($(sha256sum "${ARTIFACT_NAME}"))
-                                    echo "${sha256}"
-                                '''
-                            )
-                            if (downloaded_artifact_sha256.trim() == ARTIFACT_SHA256.trim()) {
-                                echo "SHA256 checksum matches!"
-                            } else {
-                                echo "SHA256 checksum failed"
-                                if (package_download_retry_counter == package_download_retries) {
-                                    currentBuild.result = 'FAILURE'
-                                }
-                                error('Quitting')
-                            }
-                        }
+                    } else {
+                        sh '''
+                            [ -d app ] && rm -rf app
+                            git config --global advice.detachedHead false
+                            git clone -q --no-checkout https://${GIT_REPO} app
+                            cd app
+                            git sparse-checkout init --cone
+                            git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
+                            git checkout ${GIT_BRANCH}
+                        '''
                     }
                 }
             }
