@@ -347,8 +347,8 @@ jobs:
           cat "$SYNC_LOG"
 
           # Count results
-          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || echo "0")
-          FAILED_COUNT=$(grep -c -E "^FAILED( *\(.*\)):" "$SYNC_LOG" || echo "0")
+          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG")
+          FAILED_COUNT=$(grep -c -E "^FAILED( *\(.*\)):" "$SYNC_LOG")
 
           echo ""
           echo "Total successful syncs: $SUCCESS_COUNT"
