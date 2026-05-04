@@ -208,7 +208,7 @@ jobs:
                 { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$VERSIONS_API_RESPONSE")
                 if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
                   echo "No versions found for org $OWNER, trying user packages (paginated)..."
-                  if ! VERSIONS_API_RESPONSE=$gh api \
+                  if ! VERSIONS_API_RESPONSE=$(gh api \
                     --paginate \
                     --slurp \
                     -H "Accept: application/vnd.github+json" \
