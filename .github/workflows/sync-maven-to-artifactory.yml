@@ -132,7 +132,7 @@ jobs:
               2>/dev/null); then
 
               echo "::warning ::Unable to fetch org packages"
-              echo "Response: "$PACKAGES_API_RESPONSE"
+              echo "Response: $PACKAGES_API_RESPONSE"
               echo "FAILED (org packages api): $OWNER" >> "$SYNC_LOG"
 
               { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$PACKAGES_API_RESPONSE")
@@ -148,7 +148,7 @@ jobs:
                   2>/dev/null); then
 
                   echo "::warning ::Unable to fetch user packages"
-                  echo "Response "$PACKAGES_API_RESPONSE"
+                  echo "Response $PACKAGES_API_RESPONSE"
                   echo "FAILED (user packages api): $OWNER" >> "$SYNC_LOG"
                   continue
                 fi
@@ -223,6 +223,7 @@ jobs:
                   fi
                 else
                   continue
+                fi
               fi
               VERSIONS=$(jq -r '.[].[].name | select(test("-(alpha|beta|rc|snapshot)"; "i") | not)' <<< "$VERSIONS_API_RESPONSE")
 
