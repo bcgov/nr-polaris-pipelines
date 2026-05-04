@@ -245,25 +245,41 @@ jobs:
                 # Download from GitHub Packages
                 TEMP_DIR=$(mktemp -d)
 
+                ARTIFACT_NAME_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}"
+                TEMP_ARTIFACT_NAME="$TEMP_DIR/${ARTIFACT_ID}-${VERSION}"
+
                 # Try to download the POM file first
-                GITHUB_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.pom"
+                POM_URL="$ARTIFACT_NAME_URL.pom"
 
                 if curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
-                     "$GITHUB_URL" \
-                     -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.pom" 2>/dev/null; then
+                     "$POM_URL" \
+                     -o "${TEMP_ARTIFACT_NAME}.pom" 2>/dev/null; then
                   echo "    ✓ Downloaded POM from GitHub"
 
                   # Download JAR file
-                  JAR_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.jar"
+                  JAR_URL="${ARTIFACT_NAME_URL}.jar"
                   curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
                        "$JAR_URL" \
-                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.jar" 2>/dev/null || echo "    (No JAR file found)"
+                       -o "${TEMP_ARTIFACT_NAME}.jar" 2>/dev/null || echo "    (No JAR file found)"
 
                   # Download sources if available
-                  SOURCES_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}-sources.jar"
+                  SOURCES_URL="${ARTIFACT_NAME_URL}-sources.jar"
                   curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
                        "$SOURCES_URL" \
-                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}-sources.jar" 2>/dev/null || echo "    (No sources JAR found)"
+                       -o "${TEMP_ARTIFACT_NAME}-sources.jar" 2>/dev/null || echo "    (No sources JAR found)"
+
+                  # Download ear if available
+                  EAR_URL="${ARTIFACT_NAME_URL}.ear"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$EAR_URL" \
+                       -o "${TEMP_ARTIFACT_NAME}.ear" 2>/dev/null || echo "    (No EAR file found)"
+
+                  # Download war if available
+                  WAR_URL="${ARTIFACT_NAME_URL}.war"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$WAR_URL" \
+                       -o "${TEMP_ARTIFACT_NAME}.war" 2>/dev/null || echo "    (No WAR file found)"
+
 
                   # Upload to Artifactory using mvn deploy:deploy-file
                   for FILE in "$TEMP_DIR"/*; do
@@ -319,10 +335,46 @@ jobs:
                            -s ~/.m2/settings.xml \
                            --batch-mode 2>&1 | grep -v "Download"; then
                         echo "    ✓ Uploaded JAR to Artifactory"
-                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (jar)" >> "$SYNC_LOG"
                       else
                         echo "    ✗ Failed to upload JAR"
-                        echo "FAILED: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                        echo "FAILED (jar upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      fi
+                    elif [[ "$FILENAME" == *.ear ]]; then
+                      # Deploy main EAR
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=ear \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded EAR to Artifactory"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (ear)" >> "$SYNC_LOG"
+                      else
+                        echo "    ✗ Failed to upload EAR"
+                        echo "FAILED (ear upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      fi
+                    elif [[ "$FILENAME" == *.war ]]; then
+                      # Deploy main WAR
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=war \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded WAR to Artifactory"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (war)" >> "$SYNC_LOG"
+                      else
+                        echo "    ✗ Failed to upload EAR"
+                        echo "FAILED (war upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
                       fi
                     fi
                   done
