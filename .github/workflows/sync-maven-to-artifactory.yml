@@ -131,6 +131,10 @@ jobs:
               "/orgs/$OWNER/packages?package_type=maven"
               2>/dev/null); then
 
+              echo "::warning ::Unable to fetch org packages"
+              echo "Response: "$PACKAGES_API_RESPONSE"
+              echo "FAILED (org packages api): $OWNER" >> "$SYNC_LOG"
+
               { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$PACKAGES_API_RESPONSE")
               if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
                 echo "No packages found for org $OWNER, trying user packages (paginated)..."
@@ -149,9 +153,6 @@ jobs:
                   continue
                 fi
               else
-                echo "::warning ::Unable to fetch org packages"
-                echo "Response: "$PACKAGES_API_RESPONSE"
-                echo "FAILED (org packages api): $OWNER" >> "$SYNC_LOG"
                 continue
               fi
             fi
@@ -163,7 +164,7 @@ jobs:
               if [ -z "$PACKAGE" ]; then
                 continue
               fi
-              
+
               # Get all versions for this package
               VERSIONS=""
 
@@ -200,6 +201,10 @@ jobs:
                 "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions" \
                 2>/dev/null); then
 
+                echo "::warning ::Unable to fetch org package versions for $OWNER::$GROUP_ID.$ARTIFACT_ID"
+                echo "Response: $VERSIONS_API_RESPONSE"
+                echo "FAILED (org versions api): $OWNER::$GROUP_ID:$ARTIFACT_ID" >> "$SYNC_LOG"
+
                 { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$VERSIONS_API_RESPONSE")
                 if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
                   echo "No versions found for org $OWNER, trying user packages (paginated)..."
@@ -217,9 +222,6 @@ jobs:
                     continue
                   fi
                 else
-                  echo "::warning ::Unable to fetch org package versions for $OWNER::$GROUP_ID.$ARTIFACT_ID"
-                  echo "Response: $VERSIONS_API_RESPONSE"
-                  echo "FAILED (org versions api): $OWNER::$GROUP_ID:$ARTIFACT_ID" >> "$SYNC_LOG"
                   continue
               fi
               VERSIONS=$(jq -r '.[].[].name | select(test("-(alpha|beta|rc|snapshot)"; "i") | not)' <<< "$VERSIONS_API_RESPONSE")
