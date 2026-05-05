@@ -57,7 +57,7 @@ jobs:
           fi
           # Version filter (optional)
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=$PP github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
             echo "version=" >> $GITHUB_OUTPUT
           fi
