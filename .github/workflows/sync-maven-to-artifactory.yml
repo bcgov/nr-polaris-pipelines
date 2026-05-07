@@ -334,7 +334,7 @@ jobs:
                            -DrepositoryId=artifactory \
                            -Durl="${ARTIFACTORY_REGISTRY}" \
                            -s ~/.m2/settings.xml \
-                           --batch-mode 2>&1 | grep -v "Download"; then
+                           --batch-mode 2>&1; then
                         echo "    ✓ Uploaded POM to Artifactory"
                       else
                         echo "    ✗ Failed to upload POM"
@@ -351,7 +351,7 @@ jobs:
                            -DrepositoryId=artifactory \
                            -Durl="${ARTIFACTORY_REGISTRY}" \
                            -s ~/.m2/settings.xml \
-                           --batch-mode 2>&1 | grep -v "Download"; then
+                           --batch-mode 2>&1; then
                         echo "    ✓ Uploaded sources JAR to Artifactory"
                       else
                         echo "    ✗ Failed to upload sources JAR"
@@ -367,7 +367,7 @@ jobs:
                            -DrepositoryId=artifactory \
                            -Durl="${ARTIFACTORY_REGISTRY}" \
                            -s ~/.m2/settings.xml \
-                           --batch-mode 2>&1 | grep -v "Download"; then
+                           --batch-mode 2>&1; then
                         echo "    ✓ Uploaded JAR to Artifactory"
                         echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (jar)" >> "$SYNC_LOG"
                       else
@@ -385,7 +385,7 @@ jobs:
                            -DrepositoryId=artifactory \
                            -Durl="${ARTIFACTORY_REGISTRY}" \
                            -s ~/.m2/settings.xml \
-                           --batch-mode 2>&1 | grep -v "Download"; then
+                           --batch-mode 2>&1; then
                         echo "    ✓ Uploaded EAR to Artifactory"
                         echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (ear)" >> "$SYNC_LOG"
                       else
@@ -403,7 +403,7 @@ jobs:
                            -DrepositoryId=artifactory \
                            -Durl="${ARTIFACTORY_REGISTRY}" \
                            -s ~/.m2/settings.xml \
-                           --batch-mode 2>&1 | grep -v "Download"; then
+                           --batch-mode 2>&1; then
                         echo "    ✓ Uploaded WAR to Artifactory"
                         echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (war)" >> "$SYNC_LOG"
                       else
