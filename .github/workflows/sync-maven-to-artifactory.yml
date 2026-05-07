@@ -101,6 +101,13 @@ jobs:
           # Split repositories by comma
           IFS=',' read -ra REPO_ARRAY <<< "$REPOSITORIES"
 
+          test_gh_limit_warning() {
+            if [ "$1" -ge 10000 ]; then
+              echo "::warning ::GitHub API may be limited to 10000 packages"
+              echo "See https://docs.github.com/en/rest/packages/packages?apiVersion=2022-11-28"
+            fi
+          }
+
           for REPO in "${REPO_ARRAY[@]}"; do
             REPO=$(echo "$REPO" | xargs) # Trim whitespace
             echo "================================================"
@@ -114,56 +121,52 @@ jobs:
             # Fetch Maven packages from GitHub with pagination (accumulate into variable)
             echo "Fetching Maven packages from $REPO (paginated)..."
             PACKAGES=""
-            PAGE=1
-            while true; do
-              COUNT=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                --jq 'length' 2>/dev/null || echo "0")
-              if [ "$COUNT" = "0" ]; then
-                break
-              fi
-              PAGE_LINES=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
-              if [ -n "$PAGE_LINES" ]; then
-                PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
-              fi
-              PAGE=$((PAGE+1))
-            done
 
-            if [ -z "$PACKAGES" ]; then
-              echo "No packages found for org $OWNER, trying user packages (paginated)..."
-              PAGE=1
-              while true; do
-                COUNT=$(gh api \
+            if ! PACKAGES_API_RESPONSE=$(gh api \
+              --paginate \
+              --slurp \
+              --cache 90s \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/orgs/$OWNER/packages?package_type=maven" \
+              2>/dev/null); then
+
+              echo "::warning ::Unable to fetch org packages"
+              echo "Response: $PACKAGES_API_RESPONSE"
+              echo "FAILED (org packages api): $OWNER" >> "$SYNC_LOG"
+
+              { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$PACKAGES_API_RESPONSE")
+              if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
+                echo "No packages found for org $OWNER, trying user packages (paginated)..."
+                if ! PACKAGES_API_RESPONSE=$(gh api \
+                  --paginate \
+                  --slurp \
+                  --cache 90s \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/users/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                  --jq 'length' 2>/dev/null || echo "0")
-                if [ "$COUNT" = "0" ]; then
-                  break
+                  "/users/$OWNER/packages?package_type=maven" \
+                  2>/dev/null); then
+
+                  echo "::warning ::Unable to fetch user packages"
+                  echo "Response: $PACKAGES_API_RESPONSE"
+                  echo "FAILED (user packages api): $OWNER" >> "$SYNC_LOG"
+                  continue
                 fi
-                PAGE_LINES=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/users/$OWNER/packages?package_type=maven&per_page=100&page=$PAGE" \
-                  --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
-                if [ -n "$PAGE_LINES" ]; then
-                  PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
-                fi
-                PAGE=$((PAGE+1))
-              done
+              else
+                continue
+              fi
             fi
+            test_gh_limit_warning $(jq -r 'reduce .[] as $page (0; . + ($page | length))' <<< "$PACKAGES_API_RESPONSE")
+            PACKAGES=$(jq -r '.[].[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null <<< "$PACKAGES_API_RESPONSE")
 
             # Process each package (names only) - loop over variable
             while IFS= read -r PACKAGE; do
               if [ -z "$PACKAGE" ]; then
                 continue
               fi
+
+              # Get all versions for this package
+              VERSIONS=""
 
               # Remove quotes if present (gh --jq outputs JSON strings by default)
               PACKAGE_NAME=$(echo "$PACKAGE" | tr -d '"')
@@ -189,54 +192,43 @@ jobs:
                 fi
               fi
 
-              # Get all versions for this package with pagination (accumulate into variable)
-              VERSIONS=""
-              PAGE=1
-              while true; do
-                COUNT=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
-                  --jq 'length' 2>/dev/null || echo "0")
-                if [ "$COUNT" = "0" ]; then
-                  break
-                fi
-                PAGE_VERS=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
-                  --jq '.[].name | select(test("-(alpha|beta|rc|snapshot)"; "i") | not)' 2>/dev/null || echo "")
-                if [ -n "$PAGE_VERS" ]; then
-                  VERSIONS="${VERSIONS}${PAGE_VERS}$"$'\n'
-                fi
-                PAGE=$((PAGE+1))
-              done
 
-              if [ -z "$VERSIONS" ]; then
-                PAGE=1
-                while true; do
-                  COUNT=$(gh api \
+              if ! VERSIONS_API_RESPONSE=$(gh api \
+                --paginate \
+                --slurp \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/orgs/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions" \
+                2>/dev/null); then
+
+                echo "::warning ::Unable to fetch org package versions for $OWNER::$GROUP_ID.$ARTIFACT_ID"
+                echo "Response: $VERSIONS_API_RESPONSE"
+                echo "FAILED (org versions api): $OWNER::$GROUP_ID:$ARTIFACT_ID" >> "$SYNC_LOG"
+
+                { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$VERSIONS_API_RESPONSE")
+                if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
+                  echo "No versions found for org $OWNER, trying user packages (paginated)..."
+                  if ! VERSIONS_API_RESPONSE=$(gh api \
+                    --paginate \
+                    --slurp \
                     -H "Accept: application/vnd.github+json" \
                     -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/users/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
-                    --jq 'length' 2>/dev/null || echo "0")
-                  if [ "$COUNT" = "0" ]; then
-                    break
+                    "/users/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions" \
+                    2>/dev/null); then
+
+                    echo "::warning ::Unable to fetch user package versions for $OWNER::$GROUP_ID.$ARTIFACT_ID"
+                    echo "Response: $VERSIONS_API_RESPONSE"
+                    echo "FAILED (user versions api): $OWNER::$GROUP_ID:$ARTIFACT_ID" >> "$SYNC_LOG"
+                    continue
                   fi
-                  PAGE_VERS=$(gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/users/$OWNER/packages/maven/$GROUP_ID.$ARTIFACT_ID/versions?per_page=100&page=$PAGE" \
-                    --jq '.[].name | select(test("-(alpha|beta|rc|snapshot)"; "i") | not)' 2>/dev/null || echo "")
-                  if [ -n "$PAGE_VERS" ]; then
-                    VERSIONS="${VERSIONS}${PAGE_VERS}$"$'\n'
-                  fi
-                  PAGE=$((PAGE+1))
-                done
+                else
+                  continue
+                fi
               fi
+              VERSIONS=$(jq -r '.[].[].name | select(test("-(alpha|beta|rc|snapshot)"; "i") | not)' <<< "$VERSIONS_API_RESPONSE")
 
               if [ -z "$VERSIONS" ]; then
-                echo "  No versions found for $PACKAGE_NAME"
+                echo "  No valid versions found for $PACKAGE_NAME"
                 continue
               fi
 
@@ -253,25 +245,41 @@ jobs:
                 # Download from GitHub Packages
                 TEMP_DIR=$(mktemp -d)
 
+                ARTIFACT_NAME_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}"
+                TEMP_ARTIFACT_NAME="$TEMP_DIR/${ARTIFACT_ID}-${VERSION}"
+
                 # Try to download the POM file first
-                GITHUB_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.pom"
+                POM_URL="$ARTIFACT_NAME_URL.pom"
 
                 if curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
-                     "$GITHUB_URL" \
-                     -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.pom" 2>/dev/null; then
+                     "$POM_URL" \
+                     -o "${TEMP_ARTIFACT_NAME}.pom" 2>/dev/null; then
                   echo "    ✓ Downloaded POM from GitHub"
 
                   # Download JAR file
-                  JAR_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}.jar"
+                  JAR_URL="${ARTIFACT_NAME_URL}.jar"
                   curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
                        "$JAR_URL" \
-                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}.jar" 2>/dev/null || echo "    (No JAR file found)"
+                       -o "${TEMP_ARTIFACT_NAME}.jar" 2>/dev/null || echo "    (No JAR file found)"
 
                   # Download sources if available
-                  SOURCES_URL="https://maven.pkg.github.com/$OWNER/$REPO_NAME/$GROUP_PATH/$ARTIFACT_ID/$VERSION/${ARTIFACT_ID}-${VERSION}-sources.jar"
+                  SOURCES_URL="${ARTIFACT_NAME_URL}-sources.jar"
                   curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
                        "$SOURCES_URL" \
-                       -o "$TEMP_DIR/${ARTIFACT_ID}-${VERSION}-sources.jar" 2>/dev/null || echo "    (No sources JAR found)"
+                       -o "${TEMP_ARTIFACT_NAME}-sources.jar" 2>/dev/null || echo "    (No sources JAR found)"
+
+                  # Download ear if available
+                  EAR_URL="${ARTIFACT_NAME_URL}.ear"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$EAR_URL" \
+                       -o "${TEMP_ARTIFACT_NAME}.ear" 2>/dev/null || echo "    (No EAR file found)"
+
+                  # Download war if available
+                  WAR_URL="${ARTIFACT_NAME_URL}.war"
+                  curl -f -L -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       "$WAR_URL" \
+                       -o "${TEMP_ARTIFACT_NAME}.war" 2>/dev/null || echo "    (No WAR file found)"
+
 
                   # Upload to Artifactory using mvn deploy:deploy-file
                   for FILE in "$TEMP_DIR"/*; do
@@ -327,10 +335,46 @@ jobs:
                            -s ~/.m2/settings.xml \
                            --batch-mode 2>&1 | grep -v "Download"; then
                         echo "    ✓ Uploaded JAR to Artifactory"
-                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (jar)" >> "$SYNC_LOG"
                       else
                         echo "    ✗ Failed to upload JAR"
-                        echo "FAILED: $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                        echo "FAILED (jar upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      fi
+                    elif [[ "$FILENAME" == *.ear ]]; then
+                      # Deploy main EAR
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=ear \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded EAR to Artifactory"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (ear)" >> "$SYNC_LOG"
+                      else
+                        echo "    ✗ Failed to upload EAR"
+                        echo "FAILED (ear upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
+                      fi
+                    elif [[ "$FILENAME" == *.war ]]; then
+                      # Deploy main WAR
+                      if mvn deploy:deploy-file \
+                           -DgroupId="$GROUP_ID" \
+                           -DartifactId="$ARTIFACT_ID" \
+                           -Dversion="$VERSION" \
+                           -Dpackaging=war \
+                           -Dfile="$FILE" \
+                           -DrepositoryId=artifactory \
+                           -Durl="${ARTIFACTORY_REGISTRY}" \
+                           -s ~/.m2/settings.xml \
+                           --batch-mode 2>&1 | grep -v "Download"; then
+                        echo "    ✓ Uploaded WAR to Artifactory"
+                        echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (war)" >> "$SYNC_LOG"
+                      else
+                        echo "    ✗ Failed to upload EAR"
+                        echo "FAILED (war upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
                       fi
                     fi
                   done
@@ -344,8 +388,6 @@ jobs:
 
               done <<< "$VERSIONS"
 
-              rm -f "$VERSIONS_FILE"
-
             done <<< "$PACKAGES"
 
           done
@@ -357,8 +399,8 @@ jobs:
           cat "$SYNC_LOG"
 
           # Count results
-          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || echo "0")
-          FAILED_COUNT=$(grep -c "^FAILED:" "$SYNC_LOG" || echo "0")
+          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || if [ "$?" -gt 1 ]; then echo "0"; fi)
+          FAILED_COUNT=$(grep -c -E "^FAILED( *\(.*\)):" "$SYNC_LOG" || if [ "$?" -gt 1 ]; then echo "0"; fi)
 
           echo ""
           echo "Total successful syncs: $SUCCESS_COUNT"
