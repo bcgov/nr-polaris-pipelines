@@ -407,7 +407,7 @@ jobs:
                         echo "    ✓ Uploaded WAR to Artifactory"
                         echo "SUCCESS: $GROUP_ID:$ARTIFACT_ID:$VERSION (war)" >> "$SYNC_LOG"
                       else
-                        echo "    ✗ Failed to upload EAR"
+                        echo "    ✗ Failed to upload WAR"
                         echo "FAILED (war upload): $GROUP_ID:$ARTIFACT_ID:$VERSION" >> "$SYNC_LOG"
                       fi
                     fi
