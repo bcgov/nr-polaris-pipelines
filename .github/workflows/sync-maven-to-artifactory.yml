@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       version:
-        description: 'Optional bash regex version filter (ex. ''1.0.[0-9]'' (regex) or 1.0.0)'
+        description: 'Optional comma-separated list of versions (ex. 1.0.0, 2.0.0)'
         required: false
         default: ''
   # schedule:
@@ -107,6 +107,9 @@ jobs:
 
           if [ -n "$VERSION_FILTER" ]; then
             echo "Version filter enabled: '$VERSION_FILTER'"
+            # Remove all whitespace and split by comma
+            VERSION_FILTER=$(tr -d [:blank:] <<< "$VERSION_FILTER")
+            IFS=',' read -ra VERSION_FILTER_ARRAY <<< "$VERSION_FILTER"
           else
             echo "No version filter provided; syncing all versions found."
           fi
@@ -255,8 +258,15 @@ jobs:
                   continue
                 fi
 
-                if [ -n "$VERSION_FILTER" ]; then
-                  if [ "$VERSION" != "$VERSION_FILTER" ] && [[ ! "$VERSION" =~ $VERSION_FILTER ]]; then
+                if [ -n "$VERSION_FILTER_ARRAY" ]; then
+                  FOUND_FILTERED_VERSION=0
+                  for FILTERED_VERSION in "${VERSION_FILTER_ARRAY[@]}"; do
+                    if [[ "$VERSION" == "$FILTERED_VERSION" ]]; then
+                      FOUND_FILTERED_VERSION=1
+                      break
+                    fi
+                  done
+                  if [ "$FOUND_FILTERED_VERSION" != "1" ]; then
                     echo "  Skipping version $VERSION: does not match filter '$VERSION_FILTER'"
                     continue
                   fi
