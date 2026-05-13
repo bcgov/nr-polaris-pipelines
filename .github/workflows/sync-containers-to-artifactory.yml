@@ -170,7 +170,7 @@ jobs:
 
                     echo "::warning ::Unable to fetch user package versions for $OWNER::$PACKAGE"
                     echo "Response: $VERSIONS_API_RESPONSE"
-                    echo "FAILED (user versions api_: $OWNER::PACKAGE" >> "$SYNC_LOG"
+                    echo "FAILED (user versions api): $OWNER::PACKAGE" >> "$SYNC_LOG"
                     continue
                   fi
                 else
