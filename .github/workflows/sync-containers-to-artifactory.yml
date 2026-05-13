@@ -140,6 +140,8 @@ jobs:
 
               echo "Processing package: $PACKAGE"
 
+              PACKAGE_URI_ENCODED="$(printf '%s' "$PACKAGE" | jq -sRr @uri)"
+
               # Get all versions/tags for this package with pagination (accumulate into variable)
               VERSIONS=""
  
@@ -148,7 +150,7 @@ jobs:
                 --slurp \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages/container/$PACKAGE/versions" \
+                "/orgs/$OWNER/packages/container/$PACKAGE_URI_ENCODED/versions" \
                 2>/dev/null); then
       
                 echo "::warning ::Unable to fetch org package versions for $OWNER::$PACKAGE"
@@ -165,7 +167,7 @@ jobs:
                     --slurp \
                     -H "Accept: application/vnd.github+json" \
                     -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/users/$OWNER/packages/container/$PACKAGE/versions" \
+                    "/users/$OWNER/packages/container/$PACKAGE_URI_ENCODED/versions" \
                     2>/dev/null); then
 
                     echo "::warning ::Unable to fetch user package versions for $OWNER::$PACKAGE"
