@@ -110,7 +110,7 @@ jobs:
                   --cache 90s \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/users/$OWNER/packages?package_type=container \
+                  "/users/$OWNER/packages?package_type=container" \
                   2>/dev/null); then
 
                   echo "::warning ::Unable to fetch user packages"
@@ -148,7 +148,7 @@ jobs:
                 --slurp \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages/container/$PACKAGE/versions \
+                "/orgs/$OWNER/packages/container/$PACKAGE/versions" \
                 2>/dev/null); then
       
                 echo "::warning ::Unable to fetch org package versions for $OWNER::$PACKAGE"
