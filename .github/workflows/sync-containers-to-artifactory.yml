@@ -180,7 +180,7 @@ jobs:
                 fi
               fi
 
-              VERSIONS=$(jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' <<< "$VERSIONS_API_RESPONSE")
+              VERSIONS=$(jq '.[].[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' <<< "$VERSIONS_API_RESPONSE")
 
               if [ -z "$VERSIONS" ]; then
                 echo "No tagged versions found for $PACKAGE"
