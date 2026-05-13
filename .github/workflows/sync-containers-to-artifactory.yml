@@ -66,6 +66,14 @@ jobs:
           # Split repositories by comma
           IFS=',' read -ra REPO_ARRAY <<< "$REPOSITORIES"
 
+
+          test_gh_limit_warning() {
+            if [ "$1" -ge 10000 ]; then
+              echo "::warning ::GitHub API may be limited to 10000 packages"
+              echo "See https://docs.github.com/en/rest/packages/packages?apiVersion=2022-11-28"
+            fi
+          }
+
           for REPO in "${REPO_ARRAY[@]}"; do
             REPO=$(echo "$REPO" | xargs) # Trim whitespace
             echo "================================================"
@@ -79,50 +87,44 @@ jobs:
             # Fetch container packages from GHCR with pagination (accumulate into variable)
             echo "Fetching packages from $REPO (paginated)..."
             PACKAGES=""
-            PAGE=1
-            while true; do
-              COUNT=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
-                --jq 'length' 2>/dev/null || echo "0")
-              if [ "$COUNT" = "0" ]; then
-                break
-              fi
-              PAGE_LINES=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/orgs/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
-                --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
-              if [ -n "$PAGE_LINES" ]; then
-                PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
-              fi
-              PAGE=$((PAGE+1))
-            done
+            if ! PACKAGES_API_RESPONSE=$(gh api \
+              --paginate \
+              --slurp \
+              --cache 90s \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/orgs/$OWNER/packages?package_type=container" \
+              2>/dev/null); then
 
-            if [ -z "$PACKAGES" ]; then
-              echo "No org packages found; trying user packages (paginated)..."
-              PAGE=1
-              while true; do
-                COUNT=$(gh api \
+              echo "::warning ::Unable to fetch org packages"
+              echo "Response: $PACKAGES_API_RESPONSE"
+              echo "FAILED (org packages api): $OWNER" >> "$SYNC_LOG"
+
+              { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$PACKAGES_API_RESPONSE")
+
+              if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
+                echo "No packages found for org $OWNER; trying user packages (paginated)..."
+                if ! PACKAGES_API_RESPONSE=$(gh api \
+                  --paginate \
+                  --slurp \
+                  --cache 90s \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/users/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
-                  --jq 'length' 2>/dev/null || echo "0")
-                if [ "$COUNT" = "0" ]; then
-                  break
+                  "/users/$OWNER/packages?package_type=container \
+                  2>/dev/null); then
+
+                  echo "::warning ::Unable to fetch user packages"
+                  echo "Response: $PACKAGES_API_RESPONSE"
+                  echo "FAILED (user packages api): $OWNER" >> "$SYNC_LOG"
+                  continue
                 fi
-                PAGE_LINES=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/users/$OWNER/packages?package_type=container&per_page=100&page=$PAGE" \
-                  --jq '.[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null || echo "")
-                if [ -n "$PAGE_LINES" ]; then
-                  PACKAGES="${PACKAGES}${PAGE_LINES}"$'\n'
-                fi
-                PAGE=$((PAGE+1))
-              done
+              else
+                continue
+              fi
             fi
+
+            test_gh_limit_warning $(jq -r 'reduce .[] as $page (0; . + ($page | length))' <<< "$PACKAGES_API_RESPONSE")
+            PACKAGES=$(jq -r '.[].[] | select(.repository.name == "'$REPO_NAME'") | .name' 2>/dev/null <<< "$PACKAGES_API_RESPONSE")
 
             if [ -z "$PACKAGES" ]; then
               echo "Warning: No container packages found for $REPO"
@@ -140,49 +142,43 @@ jobs:
 
               # Get all versions/tags for this package with pagination (accumulate into variable)
               VERSIONS=""
-              PAGE=1
-              while true; do
-                COUNT=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
-                  --jq 'length' 2>/dev/null || echo "0")
-                if [ "$COUNT" = "0" ]; then
-                  break
-                fi
-                PAGE_TAGS=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "/orgs/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
-                  --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
-                if [ -n "$PAGE_TAGS" ]; then
-                  VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
-                fi
-                PAGE=$((PAGE+1))
-              done
+ 
+              if ! VERSIONS_API_RESPONSE=$(gh api \
+                --paginate \
+                --slurp \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/orgs/$OWNER/packages/container/$PACKAGE/versions \
+                2>/dev/null); then
+      
+                echo "::warning ::Unable to fetch org package versions for $OWNER::$PACKAGE"
+                echo "Response: $VERSIONS_API_RESPONSE"
+                echo "FAILED (org versions api): $OWNER::$PACKAGE" >> "$SYNC_LOG"
 
-              if [ -z "$VERSIONS" ]; then
-                PAGE=1
-                while true; do
-                  COUNT=$(gh api \
+                { read -r ERR_MSG; read -r ERR_STATUS; } < <(jq -r '.[0] | .message, .status' <<< "$VERSIONS_API_RESPONSE")
+
+                if [ "$ERR_MSG" = "Not Found" -a "$ERR_STATUS" -eq 404 ]; then
+                  echo "No versions found for org $OWNER, trying user packages (paginated)..."
+
+                  if ! VERSIONS_API_RESPONSE=$(gh api \
+                    --paginate \
+                    --slurp \
                     -H "Accept: application/vnd.github+json" \
                     -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
-                    --jq 'length' 2>/dev/null || echo "0")
-                  if [ "$COUNT" = "0" ]; then
-                    break
+                    "/users/$OWNER/packages/container/$PACKAGE/versions" \
+                    2>/dev/null); then
+
+                    echo "::warning ::Unable to fetch user package versions for $OWNER::$PACKAGE"
+                    echo "Response: $VERSIONS_API_RESPONSE"
+                    echo "FAILED (user versions api_: $OWNER::PACKAGE" >> "$SYNC_LOG"
+                    continue
                   fi
-                  PAGE_TAGS=$(gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/users/$OWNER/packages/container/$PACKAGE/versions?per_page=100&page=$PAGE" \
-                    --jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' 2>/dev/null || echo "")
-                  if [ -n "$PAGE_TAGS" ]; then
-                    VERSIONS="${VERSIONS}${PAGE_TAGS}"$'\n'
-                  fi
-                  PAGE=$((PAGE+1))
-                done
+                else
+                  continue
+                fi
               fi
+
+              VERSIONS=$(jq '.[] | select(.metadata.container.tags | length > 0) | .metadata.container.tags[]' <<< "$VERSIONS_API_RESPONSE")
 
               if [ -z "$VERSIONS" ]; then
                 echo "No tagged versions found for $PACKAGE"
@@ -245,8 +241,8 @@ jobs:
           cat "$SYNC_LOG"
 
           # Count results
-          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || echo "0")
-          FAILED_COUNT=$(grep -c "^FAILED:" "$SYNC_LOG" || echo "0")
+          SUCCESS_COUNT=$(grep -c "^SUCCESS:" "$SYNC_LOG" || if [ "$?" -gt 1 ]; then echo "0"; fi)
+          FAILED_COUNT=$(grep -c -E "^FAILED( *\(.*\)):" "$SYNC_LOG" || if [ "$?" -gt 1 ]; then echo "0"; fi)
 
           echo ""
           echo "Total successful syncs: $SUCCESS_COUNT"
