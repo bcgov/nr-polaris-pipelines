@@ -36,19 +36,8 @@ jobs:
             echo "repositories=bcgov-c/nr-hbs-daily-data-scan" >> $GITHUB_OUTPUT
           fi
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      - name: Login to Artifactory
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.ARTIFACTORY_REGISTRY }}
-          username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@v2
 
       - name: Scan and sync containers
         env:
@@ -66,13 +55,15 @@ jobs:
           # Split repositories by comma
           IFS=',' read -ra REPO_ARRAY <<< "$REPOSITORIES"
 
-
           test_gh_limit_warning() {
             if [ "$1" -ge 10000 ]; then
               echo "::warning ::GitHub API may be limited to 10000 packages"
               echo "See https://docs.github.com/en/rest/packages/packages?apiVersion=2022-11-28"
             fi
           }
+
+          oras login ${{ env.GHCR_REGISTRY }} -u ${{ github.actor }} --password-stdin <<< ${{ secrets.GHCR_PAT }}
+          oras login ${{ env.ARTIFACTORY_REGISTRY }} -u ${{ secrets.ARTIFACTORY_USERNAME }} --password-stdin <<< ${{ secrets.ARTIFACTORY_PASSWORD }}
 
           for REPO in "${REPO_ARRAY[@]}"; do
             REPO=$(echo "$REPO" | xargs) # Trim whitespace
@@ -202,32 +193,18 @@ jobs:
                 echo "Syncing: $SOURCE_IMAGE -> $DEST_IMAGE"
 
                 # Check if image already exists in Artifactory (optional optimization)
-                if docker manifest inspect "$DEST_IMAGE" > /dev/null 2>&1; then
+                if oras manifest fetch "$DEST_IMAGE" > /dev/null 2>&1; then
                   echo "  ✓ Image already exists in Artifactory, skipping"
                   continue
                 fi
 
-                # Pull from GHCR
-                if docker pull "$SOURCE_IMAGE"; then
-                  echo "  ✓ Pulled from GHCR"
-
-                  # Tag for Artifactory
-                  docker tag "$SOURCE_IMAGE" "$DEST_IMAGE"
-
-                  # Push to Artifactory
-                  if docker push "$DEST_IMAGE"; then
-                    echo "  ✓ Pushed to Artifactory"
-                    echo "SUCCESS: $SOURCE_IMAGE -> $DEST_IMAGE" >> "$SYNC_LOG"
-                  else
-                    echo "  ✗ Failed to push to Artifactory"
-                    echo "FAILED (push): $DEST_IMAGE" >> "$SYNC_LOG"
-                  fi
-
-                  # Clean up local images to save space
-                  docker rmi "$SOURCE_IMAGE" "$DEST_IMAGE" 2>/dev/null || true
+                # Copy from GHCR
+                if oras cp "$SOURCE_IMAGE" "$DEST_IMAGE"; then
+                  echo "  ✓ Copied to Artifactory"
+                  echo "SUCCESS: $SOURCE_IMAGE -> $DEST_IMAGE" >> "$SYNC_LOG"
                 else
-                  echo "  ✗ Failed to pull from GHCR"
-                  echo "FAILED (pull): $SOURCE_IMAGE" >> "$SYNC_LOG"
+                  echo "  ✗ Failed to copy from GHCR to Artifactory"
+                  echo "FAILED (copy): $SOURCE_IMAGE $DEST_IMAGE" >> "$SYNC_LOG"
                 fi
 
               done <<< "$VERSIONS"
@@ -258,7 +235,3 @@ jobs:
           path: sync-log-*.txt
           retention-days: 30
 
-      - name: Cleanup Docker images
-        if: always()
-        run: |
-          docker system prune -af --volumes || true
