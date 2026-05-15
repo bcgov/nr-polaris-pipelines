@@ -13,6 +13,7 @@ on:
 
 env:
   GHCR_REGISTRY: ghcr.io
+  ARTIFACTORY_URL: ${{ secrets.ARTIFACTORY_URL }}
   ARTIFACTORY_REGISTRY: ${{ secrets.ARTIFACTORY_DOCKER_REGISTRY }}
 
 jobs:
@@ -63,7 +64,7 @@ jobs:
           }
 
           oras login ${{ env.GHCR_REGISTRY }} -u ${{ github.actor }} --password-stdin <<< ${{ secrets.GHCR_PAT }}
-          oras login ${{ env.ARTIFACTORY_REGISTRY }} -u ${{ secrets.ARTIFACTORY_USERNAME }} --password-stdin <<< ${{ secrets.ARTIFACTORY_PASSWORD }}
+          oras login ${{ env.ARTIFACTORY_URL }} -u ${{ secrets.ARTIFACTORY_USERNAME }} --password-stdin <<< ${{ secrets.ARTIFACTORY_PASSWORD }}
 
           for REPO in "${REPO_ARRAY[@]}"; do
             REPO=$(echo "$REPO" | xargs) # Trim whitespace
