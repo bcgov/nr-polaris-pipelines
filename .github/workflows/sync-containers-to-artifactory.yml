@@ -7,6 +7,14 @@ on:
         description: 'Comma-separated list of repositories to scan (owner/repo)'
         required: false
         default: ''
+      package:
+        description: 'Optional package filter (ex. java-maven-pipeline-example/java-maven-pipeline-example)'
+        required: false
+        default: ''
+      tag:
+        description: 'Optional comma separated list of tags (ex. 1.0.0, 2.0.0)'
+        required: false
+        default: ''
   # schedule:
   #   # Run daily at 2 AM UTC
   #   - cron: '0 2 * * *'
@@ -27,7 +35,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up repositories list
+      - name: Set up inputs
         id: setup
         run: |
           if [ -n "${{ github.event.inputs.repositories }}" ]; then
@@ -35,6 +43,18 @@ jobs:
           else
             # Default repositories to scan (customize this list)
             echo "repositories=bcgov-c/nr-hbs-daily-data-scan" >> $GITHUB_OUTPUT
+          fi
+          # Container filter (optional)
+          if [ -n "${{ github.event.inputs.package }}" ]; then
+            echo "package=${{ github.event.inputs.package }}" >> $GITHUB_OUTPUT
+          else
+            echo "package=" >> $GITHUB_OUTPUT
+          fi
+          # Tag filter (optional)
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup ORAS
@@ -44,10 +64,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
           REPOSITORIES: ${{ steps.setup.outputs.repositories }}
+          PACKAGE_FILTER: ${{ steps.setup.outputs.package }}
+          TAG_FILTER: ${{ steps.setup.outputs.tag }}
         run: |
           set -e
 
           echo "Starting container sync process..."
+
+          if [ -n "$PACKAGE_FILTER" ]; then
+            echo "Package filter enabled: '$PACKAGE_FILTER'"
+          else
+            echo "No package filter provided; syncing all packages found."
+          fi
+
+          if [ -n "$TAG_FILTER" ]; then
+            echo "Tag filter enabled: '$TAG_FILTER'"
+            # Remove all whitespace and split by comma
+            TAG_FILTER=$(tr -d [:blank:] <<< "$TAG_FILTER")
+            IFS=',' read -ra TAG_FILTER_ARRAY <<< "$TAG_FILTER"
+          else
+            echo "No tag filter provided; syncing all tags found."
+          fi
 
           # Create sync tracking file
           SYNC_LOG="sync-log-$(date +%Y%m%d-%H%M%S).txt"
@@ -132,6 +169,14 @@ jobs:
 
               echo "Processing package: $PACKAGE"
 
+              # Apply optional package filter (match by full name)
+              if [ -n "$PACKAGE_FILTER" ]; then
+                if [ "$PACKAGE_FILTER" != "$PACKAGE" ]; then
+                  echo "  Skipping: does not match filter '$PACKAGE_FILTER'"
+                  continue
+                fi
+              fi
+
               PACKAGE_URI_ENCODED="$(printf '%s' "$PACKAGE" | jq -sRr @uri)"
 
               # Get all versions/tags for this package with pagination (accumulate into variable)
@@ -187,6 +232,20 @@ jobs:
 
                 # Remove quotes from tag
                 TAG=$(echo "$TAG" | tr -d '"')
+
+                if [ -n "$TAG_FILTER_ARRAY" ]; then
+                  FOUND_FILTERED_TAG=0
+                  for FILTERED_TAG in "${TAG_FILTER_ARRAY[@]}"; do
+                    if [[ "$TAG" == "$FILTERED_TAG" ]]; then
+                      FOUND_FILTERED_TAG=1
+                      break
+                    fi
+                  done
+                  if [ "$FOUND_FILTERED_TAG" != "1" ]; then
+                    echo "  Skipping tag $TAG: does not match filter '$TAG_FILTER'"
+                    continue
+                  fi
+                fi
 
                 SOURCE_IMAGE="${GHCR_REGISTRY}/${OWNER}/${PACKAGE}:${TAG}"
                 DEST_IMAGE="${ARTIFACTORY_REGISTRY}/${OWNER}/${PACKAGE}:${TAG}"
