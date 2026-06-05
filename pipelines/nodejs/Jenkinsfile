@@ -70,11 +70,9 @@ pipeline {
                         returnStdout: true,
                         script: '''
                             cd downloads/app
-                            output=$(/sw_ux/bin/oras pull ${DOWNLOAD_URL} --format go-template='{{toRawJson .}}' > /tmp/oras_output.json 2>/dev/null)
-                            file_digests=$(jq -r '.files | map(.digest) | join(",")' /tmp/oras_output.json)
-                            sha256=$(echo "${file_digests}" | sha256sum | awk '{print $1}')
+                            /sw_ux/bin/oras pull ${DOWNLOAD_URL} > /dev/null 2>&1
+                            sha256=$(/sw_ux/bin/oras manifest fetch ${DOWNLOAD_URL} | jq -r '.layers | map(.digest) | join(",")' | sha256sum | awk '{print $1}')
                             echo "${sha256}"
-                            rm -f /tmp/oras_output.json
                         '''
                     )
 
