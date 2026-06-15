@@ -7,14 +7,48 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 def intention
 def podman
 
+/*
+ * Pipeline parameters consumed by this Jenkinsfile:
+ * - projectVersion: Display/build package version and deployment metadata version.
+ * - envLong: Target environment (dev, test, production).
+ * - deployUrl: ORAS reference for deployment configuration package.
+ * - deployRoot: Deployment configuration root path within the ORAS package (default: .).
+ * - artifactUrl: ORAS reference for application package.
+ * - artifactSrc: Artifact registry type (github or artifactory).
+ * - artifactSha256: Expected SHA256 digest for deploy/app ORAS content.
+ * - githubUser: Username for GHCR login.
+ * - githubToken: Token for GHCR login.
+ * - eventProvider: Event source/provider name sent to Broker.
+ * - githubRunId: External workflow run id used in trigger metadata.
+ * - triggerUrl: External workflow/job URL used in trigger metadata.
+ * - ansibleCollectionBranchTag: Polaris collection tag/branch (default: v3.5.0).
+ * - deploymentApprover: Username/email recorded as deployment approver (default: github@internal).
+ * - intentionId: Source intention id recorded in deployment metadata.
+ * - sourceRoot: Application source root path (default: .).
+ * - brokerJwt: Broker JWT used to open deployment intention.
+ * - devInventoryPath: Inventory file path for dev deployments.
+ * - testInventoryPath: Inventory file path for test deployments.
+ * - prodInventoryPath: Inventory file path for production deployments.
+ *
+ * Project/component are derived from catalog-info.yaml at the root of the deploy package
+ * - project: spec.system
+ * - component: metadata.name
+ */
+
 pipeline {
     agent none
     stages {
         stage('Initialize') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
             steps {
                 script {
                     // Set the build display name
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${params.projectVersion} - ${params.envLong}"
+
+                    // Clean up any existing files in the downloads directory and create necessary subdirectories
+                    sh 'rm -rf downloads ; mkdir -p downloads/app ; mkdir -p downloads/deploy'
                 }
             }
         }
@@ -34,67 +68,122 @@ pipeline {
                 }
             }
         }
-        stage('Checkout app and download package') {
+        stage('Download deployment configuration package') {
             agent {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                GIT_REPO = "${params.gitRepo}"
-                GIT_BRANCH = "${params.configBranch != null && params.configBranch != "" ? params.configBranch : params.gitTag != null && params.gitTag != "" ? params.gitTag : params.gitBranch}"
-                GITHUB_PRIVATE_REPO = "${params.githubToken != null && params.githubToken != "" ? 'true' : ''}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
-                DOWNLOAD_TYPE =" ${params.downloadType}"
-                ARTIFACT_SHA256 = "${params.artifactSha256}"
-                SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "null" && params.sourceRoot != "" ? params.sourceRoot : "."}"
-                PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+                DEPLOY_URL = "${params.deployUrl}"
+                DEPLOY_SHA256 = "${params.artifactSha256}"
+                GITHUB_USER = "${params.githubUser}"
             }
             steps {
                 script {
-                    echo 'NR POLARIS - Checkout app and download package'
-                    echo "GIT_BRANCH: ${GIT_BRANCH}"
-                    sh 'rm -rf app'
-                    sh 'rm -rf downloads ; mkdir -p downloads/app'
-                    if (env.GITHUB_PRIVATE_REPO) {
-                        env.GITHUB_USER = "${params.githubUser}"
-                        env.GITHUB_TOKEN = "${params.githubToken}"
-                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
-                            sh '''
-                                git config --global advice.detachedHead false
-                                git clone -q --no-checkout https://${GITHUB_USER}:${GITHUB_TOKEN}@${GIT_REPO} app
-                                cd app
-                                git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
-                                git checkout ${GIT_BRANCH}
-                            '''
-                            sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin '
-                            //sh 'ls -l downloads/app'
-                        }
-                    } else {
-                        sh '''
-                            git config --global advice.detachedHead false
-                            git clone -q --no-checkout https://${GIT_REPO} app
-                            cd app
-                            git sparse-checkout set .jenkins catalog-info.yaml ${SOURCE_ROOT}/${PLAYBOOKS_PATH}
-                            git checkout ${GIT_BRANCH}
-                        '''
+                    echo 'NR POLARIS - Download deployment configuration package'
+                    env.GITHUB_TOKEN = params.githubToken
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
                         sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
                     }
-                    def download_sha256 = sh(
+                    def deploy_sha256 = sh(
                         returnStdout: true,
                         script: '''
-                            cd downloads/app
-                            output=$(/sw_ux/bin/oras pull ${DOWNLOAD_URL} --format go-template='{{toRawJson .}}' > /tmp/oras_output.json 2>/dev/null)
-                            sha256=$(jq -r '.files[] | select(.annotations["org.opencontainers.image.title"] == "dist") | .digest | split(":")[1]' /tmp/oras_output.json)
+                            cd downloads/deploy
+                            output=$(/sw_ux/bin/oras pull ${DEPLOY_URL} --format go-template='{{toRawJson .}}' > ./oras_output.json 2>/dev/null)
+                            sha256=$(sha256sum ./oras_output.json | awk '{print $1}')
                             echo "${sha256}"
-                            rm -f /tmp/oras_output.json
+                            rm -f ./oras_output.json
                         '''
                     )
 
-                    if (download_sha256.trim() != ARTIFACT_SHA256.trim()) {
+                    // TODO: Part of deploy configuration tracking
+                    // if (deploy_sha256.trim() != DEPLOY_SHA256.trim()) {
+                    //     error "Checksum verification failed!"
+                    // } else {
+                    //     echo "Checksum verification passed!"
+                    // }
+                    sh 'ls -al downloads/deploy'
+                }
+            }
+        }
+        stage('Open Intention') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            environment {
+                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
+                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
+                EVENT_PROVIDER = "${params.eventProvider}"
+                GITHUB_RUNID= "${params.githubRunId}"
+                TRIGGER_URL = "${params.triggerUrl}"
+                ENV_LONG = "${params.envLong}"
+                INTENTION_ID = "${params.intentionId}"
+                PROJECT_VERSION = "${params.projectVersion}"
+            }
+            steps {
+                script {
+                    def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
+                    env.PROJECT = catalogInfo.spec.system
+                    env.COMPONENT = catalogInfo.metadata.name
+
+                    def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+
+                    intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "downloads/deploy/.jenkins/${env.COMPONENT}-deployment-intention.json"))
+                    intention.setEventDetails(
+                        userName: env.DEPLOYMENT_APPROVER,
+                        url: env.BUILD_URL,
+                        provider: env.EVENT_PROVIDER,
+                        triggerId: triggerId,
+                        triggerUrl: env.TRIGGER_URL,
+                        environment: env.ENV_LONG,
+                        packageInstallationVersion: env.PROJECT_VERSION,
+                        packageInstallationSourceIntention: env.INTENTION_ID
+                    )
+                    intention.open()
+                }
+            }
+        }
+        stage('Download app package') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            environment {
+                ARTIFACT_URL = "${params.artifactUrl}"
+                ARTIFACT_SRC = "${params.artifactSrc}"
+                ARTIFACT_SHA256 = "${params.artifactSha256}"
+                GITHUB_USER = "${params.githubUser}"
+            }
+            steps {
+                script {
+                    echo 'NR POLARIS - Download app package'
+
+                    if (env.ARTIFACT_SRC == 'repo' || env.ARTIFACT_SRC == 'github') {
+                        env.GITHUB_TOKEN = params.githubToken
+                        wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: env.GITHUB_TOKEN, password: GITHUB_TOKEN]]]) {
+                            sh 'echo ${GITHUB_TOKEN} | /sw_ux/bin/oras login ghcr.io -u ${GITHUB_USER} --password-stdin'
+                        }
+                    } else if (env.ARTIFACT_SRC == 'artifactory') {
+                        sh 'echo ${ARTIFACTORY_PASSWORD} | /sw_ux/bin/oras login ${ARTIFACTORY_URL} -u ${ARTIFACTORY_USERNAME} --password-stdin'
+                    } else {
+                        error "Invalid artifact source specified: ${ARTIFACT_SRC}"
+                    }
+
+                    def artifact_sha256 = sh(
+                        returnStdout: true,
+                        script: '''
+                            cd downloads/app
+                            output=$(/sw_ux/bin/oras pull ${ARTIFACT_URL} --format go-template='{{toRawJson .}}' > ./oras_output.json 2>/dev/null)
+                            sha256=$(cat ./oras_output.json | jq -r '.files | map(.digest) | join(",")' | sha256sum | awk '{print $1}')
+                            echo "${sha256}"
+                            rm -f ./oras_output.json
+                        '''
+                    )
+
+                    if ("${artifact_sha256.trim()}" != "${ARTIFACT_SHA256.trim()}") {
                         error "Checksum verification failed!"
                     } else {
                         echo "Checksum verification passed!"
                     }
-                    sh 'ls -l downloads/app'
+                    sh 'ls -al downloads/app'
                 }
             }
         }
@@ -125,13 +214,8 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             environment {
-                PROJECT = "${params.project}"
-                COMPONENT = "${params.component}"
-                GIT_REPO = "${params.gitRepo}"
-                GIT_BRANCH = "${params.gitBranch}"
+                DEPLOY_ROOT = "${params.deployRoot != null && params.deployRoot != "" ? params.deployRoot : "."}"
                 ENV_LONG = "${params.envLong}"
-                EVENT_PROVIDER = "${params.eventProvider}"
-                GITHUB_RUNID= "${params.githubRunId}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
                 ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v4.2.0"}"
@@ -141,22 +225,19 @@ pipeline {
                 GIT_CREDS_USR = GIT_CREDS_USR.replaceFirst('@', '%40')
                 CONFIG_ROLE_ID = credentials('knox-jenkins-jenkins-apps-prod-role-id')
                 AUTHFILE = "auth.json"
-                DEPLOYMENT_APPROVER = "${params.deploymentApprover != null && params.deploymentApprover != "" ? params.deploymentApprover : "github@internal"}"
                 INTENTION_ID = "${params.intentionId}"
-                DOWNLOAD_URL = "${params.downloadUrl}"
-                DOWNLOAD_TYPE =" ${params.downloadType}"
                 PODMAN_ARTIFACT_SHA256 = "${params.artifactSha256}"
                 PODMAN_PROJECT_VERSION = "${params.projectVersion}"
-                PODMAN_SOURCE_ROOT = "${params.sourceRoot != null && params.sourceRoot != "" ? params.sourceRoot : "."}"
-                PODMAN_PLAYBOOKS_PATH = "${params.playbooksPath != null && params.playbooksPath != "" ? params.playbooksPath : "playbooks"}"
+                PODMAN_PLAYBOOKS_PATH = "downloads/deploy/${env.DEPLOY_ROOT}/playbooks"
             }
             steps {
                 script {
                     try {
                         echo "Deploy to ${env.ENV_LONG} environment"
+                        def catalogInfo = readYaml file: "downloads/deploy/${env.DEPLOY_ROOT}/catalog-info.yaml"
+                        env.PROJECT = catalogInfo.spec.system
+                        env.COMPONENT = catalogInfo.metadata.name
                         env.ENV_SHORT = JenkinsUtil.convertLongEnvToShort("${params.envLong}")
-                        def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
-                        intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "app/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                         if (env.ENV_SHORT == 'dev') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.devInventoryPath
                         } else if (env.ENV_SHORT == 'test') {
@@ -164,17 +245,6 @@ pipeline {
                         } else if (env.ENV_SHORT == 'prod') {
                             env.PODMAN_ANSIBLE_INVENTORY_PATH = params.prodInventoryPath
                         }
-                        intention.setEventDetails(
-                            userName: env.DEPLOYMENT_APPROVER,
-                            url: env.BUILD_URL,
-                            provider: env.EVENT_PROVIDER,
-                            triggerId: triggerId,
-                            triggerUrl: env.TRIGGER_URL,
-                            environment: env.ENV_LONG,
-                            packageInstallationVersion: env.PODMAN_PROJECT_VERSION,
-                            packageInstallationSourceIntention: env.INTENTION_ID
-                        )
-                        intention.open()
                         intention.startAction("login")
                         def vaultToken = intention.provisionToken("login", CONFIG_ROLE_ID)
                         def vault = new Vault(vaultToken)
@@ -185,11 +255,11 @@ pipeline {
                         env.PODMAN_BUILD_URL = env.BUILD_URL
                         def appRoleId = null
                         try {
-                            withCredentials([string(credentialsId: "knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
+                            withCredentials([string(credentialsId: "knox-${env.PROJECT}-${env.COMPONENT}-${env.ENV_SHORT}-role-id", variable: 'APP_ROLE_ID')]) {
                                 appRoleId = env.APP_ROLE_ID
                             }
                         } catch (Exception e) {
-                            echo "Provisioning without AppRole RoleID (Jenkins credential: knox-${params.project}-${params.component}-${env.ENV_SHORT}-role-id)"
+                            echo "Provisioning without AppRole RoleID (Jenkins credential: knox-${env.PROJECT}-${env.COMPONENT}-${env.ENV_SHORT}-role-id)"
                             echo "Broker Account must be configured with 'Require RoleId: No'"
                         }
                         intention.startAction("configure")
@@ -203,16 +273,7 @@ pipeline {
                             env."ACTION_TOKEN_${key.toUpperCase()}" = "${value.token}"
                         }
                         podman = new Podman(this)
-                        def appMountPath
-                        if (env.PODMAN_PLAYBOOKS_PATH == "playbooks") {
-                            appMountPath = "\$(pwd)/app"
-                        } else if (env.PODMAN_SOURCE_ROOT != "." && env.PODMAN_SOURCE_ROOT != "") {
-                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
-                            appMountPath = "\$(pwd)/app/${env.PODMAN_SOURCE_ROOT}/${serviceDir}"
-                        } else {
-                            def serviceDir = env.PODMAN_PLAYBOOKS_PATH.split("/")[0]
-                            appMountPath = "\$(pwd)/app/${serviceDir}"
-                        }
+                        def appMountPath = "\$(pwd)/downloads/deploy/${env.DEPLOY_ROOT}/playbooks"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
@@ -221,10 +282,10 @@ pipeline {
                         podman.run("willhallonline/ansible:2.16-alpine-3.21",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
-                                -v ${appMountPath}:/ansible/app \
+                                -v ${appMountPath}:/ansible/app/playbooks \
                                 -v \$(pwd)/infra/inventory:/ansible/inventory \
                                 -v \$(pwd)/files/ansible/ansible.cfg:/etc/ansible/ansible.cfg \
-                                -v \$(pwd)/downloads:/ansible/downloads \
+                                -v \$(pwd)/downloads/app:/ansible/downloads/app \
                                 -e PODMAN_* -e ACTION_TOKEN_* -e COMPONENT*",
                             command: 'ansible-playbook -i inventory/${PODMAN_ANSIBLE_INVENTORY_PATH} \
                                 app/playbooks/playbook.yaml -e "env_vars=${ENV_SHORT}" -e "proxy_env=${ENV_SHORT}"')
