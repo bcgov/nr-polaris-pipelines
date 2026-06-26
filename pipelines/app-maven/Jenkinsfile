@@ -123,21 +123,20 @@ pipeline {
                 label Podman.AGENT_LABEL_APP
             }
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "release/1.0.0"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'RelativeTargetDirectory', relativeTargetDir: "infra"]
-                    ],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [
-                        [
-                            credentialsId: 'ci-user',
-                            url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
+                dir('infra') {
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "release/1.0.0"]],
+                        doGenerateSubmoduleConfigurations: false,
+                        submoduleCfg: [],
+                        userRemoteConfigs: [
+                            [
+                                credentialsId: 'ci-user',
+                                url: "https://bwa.nrs.gov.bc.ca/int/stash/scm/infra/dev-all-in-one.git"
+                            ]
                         ]
-                    ]
-                ])
+                    ])
+                }
             }
         }
         stage('Deploy to environment') {
