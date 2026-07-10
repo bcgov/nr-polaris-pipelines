@@ -1,4 +1,4 @@
-@Library('polaris@v2.1.0')
+@Library('polaris@v2.2.0')
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
@@ -94,13 +94,6 @@ pipeline {
                             rm -f ./oras_output.json
                         '''
                     )
-
-                    // TODO: Part of deploy configuration tracking
-                    // if (deploy_sha256.trim() != DEPLOY_SHA256.trim()) {
-                    //     error "Checksum verification failed!"
-                    // } else {
-                    //     echo "Checksum verification passed!"
-                    // }
                     sh 'ls -al downloads/deploy'
                 }
             }
@@ -118,6 +111,7 @@ pipeline {
                 ENV_LONG = "${params.envLong}"
                 INTENTION_ID = "${params.intentionId}"
                 PROJECT_VERSION = "${params.projectVersion}"
+                DEPLOY_URL = "${params.deployUrl}"
             }
             steps {
                 script {
@@ -126,6 +120,17 @@ pipeline {
                     env.COMPONENT = catalogInfo.metadata.name
 
                     def triggerId = "${env.COMPONENT} ${env.GITHUB_RUNID}"
+
+                    def deployIntentionId = sh(
+                        returnStdout: true,
+                        script: '''
+                            cd downloads/deploy
+                            output=$(/sw_ux/bin/oras manifest fetch ${DEPLOY_URL} > ./oras_manifest.json 2>/dev/null)
+                            intentionId=$(cat ./oras_manifest.json | jq -r '.annotations["ca.gov.nrs.io.broker.intention.id"] // empty')
+                            echo "${intentionId}"
+                            rm -f ./oras_manifest.json
+                        '''
+                    )
 
                     intention = new BrokerIntention("${params.brokerJwt}", readJSON(file: "downloads/deploy/.jenkins/${env.COMPONENT}-deployment-intention.json"))
                     intention.setEventDetails(
@@ -136,8 +141,16 @@ pipeline {
                         triggerUrl: env.TRIGGER_URL,
                         environment: env.ENV_LONG,
                         packageInstallationVersion: env.PROJECT_VERSION,
-                        packageInstallationSourceIntention: env.INTENTION_ID
                     )
+                    List<Map> referenceList = []
+                    referenceList << [action: 'package-build#build', intention: env.INTENTION_ID]
+                    if (deployIntentionId != null && deployIntentionId.trim() != "") {
+                        // If the deploy intention ID is available, add it to the reference list
+                        // TODO: Determine specific action id (#dcbuild_x) from manifest, but for now just use the first one as they are all the same
+                        referenceList << [action: 'package-build#dcbuild_0', intention: deployIntentionId.trim()]
+                    }
+
+                    intention.setActionReferences('package-installation', referenceList)
                     intention.open()
                 }
             }
