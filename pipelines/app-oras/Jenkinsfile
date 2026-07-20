@@ -287,11 +287,11 @@ pipeline {
                         podman = new Podman(this)
                         def appMountPath = "\$(pwd)/downloads/deploy/${env.DEPLOY_ROOT}/playbooks"
                         podman.login(authfile: "${env.AUTHFILE}", options: "-u ${env.REGISTRY_USERNAME} -p ${env.REGISTRY_PASSWORD}")
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                        podman.run("willhallonline/ansible:2.21-alpine-3.22",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd):/ansible -e PODMAN_*",
                             command: '/bin/sh -c "git config --global advice.detachedHead false && ansible-galaxy collection install git+https://${PODMAN_ANSIBLE_COLLECTION_URL} -p ${PODMAN_ANSIBLE_COLLECTION_PATH}"')
-                        podman.run("willhallonline/ansible:2.16-alpine-3.21",
+                        podman.run("willhallonline/ansible:2.21-alpine-3.22",
                             authfile: "${env.AUTHFILE}",
                             options: "-v \$(pwd)/collections:/ansible/app/playbooks/collections \
                                 -v ${appMountPath}:/ansible/app/playbooks \
