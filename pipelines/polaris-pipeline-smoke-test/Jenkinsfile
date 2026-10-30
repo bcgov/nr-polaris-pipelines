@@ -1,0 +1,121 @@
+@Library('polaris@v2.2.0')
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.Vault
+
+// Polaris pipeline smoke test.
+//
+// Runs the same path as app-oras up to reading the application's secrets from
+// Vault, without deploying anything: a build trigger passes a Broker JWT, the
+// pipeline opens an intention, Broker provisions a Vault token and the pipeline
+// reads a value with it. Jenkins stores no credentials for this test. The JWT
+// arrives as a build parameter, like app-oras.
+//
+// Not covered: ORAS downloads, the infrastructure checkout, the jenkins-apps
+// login, and running Ansible with Podman.
+
+def intention
+
+final String SERVICE_PROJECT = 'oscar'
+final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
+// The service only has a tools instance in Broker, so its tools secret is the
+// only Vault path the provisioned token can read. The intention file sets the
+// same environment.
+final String VAULT_PATH = "apps/data/tools/${SERVICE_PROJECT}/${SERVICE_NAME}"
+// The secret must contain this key and value. The value is not a secret, so the
+// test can check it exactly.
+final String VAULT_KEY = 'smoke_test_value'
+final String VAULT_EXPECTED_VALUE = 'not-a-secret'
+
+pipeline {
+    agent none
+    parameters {
+        // A password parameter keeps the JWT out of the build's parameter page.
+        password(name: 'brokerJwt', description: 'Broker JWT for an account connected to oscar/polaris-pipeline-smoke-test')
+        string(name: 'eventProvider', defaultValue: 'polaris-pipeline-smoke-test', description: 'Event provider sent to Broker')
+        string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
+        string(name: 'triggerUrl', defaultValue: '', description: 'External workflow URL used in trigger metadata')
+    }
+    options {
+        // Fails the build if no agent is available, instead of leaving it queued.
+        timeout(time: 10, unit: 'MINUTES')
+    }
+    stages {
+        stage('Initialize') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    // app-oras captures checksums and intention ids with returnStdout.
+                    check(sh(returnStdout: true, script: 'echo ok').trim() == 'ok', 'sh returnStdout failed')
+                }
+            }
+        }
+        stage('Open Intention') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    def brokerIntention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json'))
+                    brokerIntention.setEventDetails(
+                        url: env.BUILD_URL,
+                        provider: params.eventProvider,
+                        triggerId: "${SERVICE_NAME} ${params.githubRunId}",
+                        triggerUrl: params.triggerUrl,
+                    )
+                    brokerIntention.open()
+                    // Only set once open succeeds, so post only closes an open intention.
+                    intention = brokerIntention
+                }
+            }
+        }
+        stage('Read Vault secret') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    intention.startAction('configure')
+                    // No role ID, like app-oras when the application has no knox role id
+                    // credential. The Broker account must be set to 'Require RoleId: No'.
+                    def vaultAppToken = intention.provisionToken('configure')
+                    def vaultApp = new Vault(vaultAppToken)
+                    // Reads only the expected key. Broker also saves generated account
+                    // tokens to this tools path, so copying the whole secret into the
+                    // build environment would expose them.
+                    def secret = vaultApp.read(VAULT_PATH)
+                    vaultApp.revokeToken()
+                    intention.endAction('configure')
+                    check(secret != null, "Could not read ${VAULT_PATH} from Vault")
+                    check(secret[VAULT_KEY] == VAULT_EXPECTED_VALUE, "Vault value ${VAULT_KEY} was missing or did not match")
+                    println intention.close(true)
+                    intention = null
+                }
+            }
+        }
+    }
+    post {
+        unsuccessful {
+            node(Podman.AGENT_LABEL_APP) {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        always {
+            node(Podman.AGENT_LABEL_APP) {
+                cleanWs(deleteDirs: true)
+            }
+        }
+    }
+}
+
+def check(boolean condition, String message) {
+    if (!condition) {
+        error(message)
+    }
+}
