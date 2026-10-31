@@ -19,7 +19,7 @@ final String SERVICE_PROJECT = 'oscar'
 final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
 // Secret text credential holding the Broker JWT of an account connected to
 // oscar/polaris-pipeline-smoke-test.
-final String BROKER_JWT_CREDENTIAL_ID = 'polaris-pipeline-smoke-test-broker-jwt'
+final String BROKER_JWT_CREDENTIAL_ID = 'nr-oscar-jwt'
 // The intention's environment is development, so the provisioned token reads
 // this dev path. The intention file sets the same environment.
 final String VAULT_PATH = "apps/data/dev/${SERVICE_PROJECT}/${SERVICE_NAME}/development"
