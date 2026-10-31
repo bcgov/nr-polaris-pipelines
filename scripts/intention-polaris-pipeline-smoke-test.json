@@ -17,11 +17,11 @@
       "service": {
         "name": "polaris-pipeline-smoke-test",
         "project": "oscar",
-        "environment": "tools"
+        "environment": "development"
       }
     }
   ],
   "user": {
-    "name": ""
+    "name": "jenkins-polaris@internal"
   }
 }

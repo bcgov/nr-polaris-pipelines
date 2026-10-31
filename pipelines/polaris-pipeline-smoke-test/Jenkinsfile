@@ -18,10 +18,9 @@ def intention
 
 final String SERVICE_PROJECT = 'oscar'
 final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
-// The service only has a tools instance in Broker, so its tools secret is the
-// only Vault path the provisioned token can read. The intention file sets the
-// same environment.
-final String VAULT_PATH = "apps/data/tools/${SERVICE_PROJECT}/${SERVICE_NAME}"
+// The intention's environment is development, so the provisioned token reads
+// this dev path. The intention file sets the same environment.
+final String VAULT_PATH = "apps/data/dev/${SERVICE_PROJECT}/${SERVICE_NAME}/development"
 // The secret must contain this key and value. The value is not a secret, so the
 // test can check it exactly.
 final String VAULT_KEY = 'smoke_test_value'
@@ -81,9 +80,8 @@ pipeline {
                     // credential. The Broker account must be set to 'Require RoleId: No'.
                     def vaultAppToken = intention.provisionToken('configure')
                     def vaultApp = new Vault(vaultAppToken)
-                    // Reads only the expected key. Broker also saves generated account
-                    // tokens to this tools path, so copying the whole secret into the
-                    // build environment would expose them.
+                    // Reads only the expected key, so nothing else in the secret is
+                    // copied into the build environment.
                     def secret = vaultApp.read(VAULT_PATH)
                     vaultApp.revokeToken()
                     intention.endAction('configure')

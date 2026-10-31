@@ -13,11 +13,13 @@
 ORAS downloads, the infrastructure checkout, the `jenkins-apps` login and running Ansible with Podman are not tested.
 
 Setup:
-- Broker service `oscar/polaris-pipeline-smoke-test` with a `tools` service instance, connected to a Broker account set to "Require RoleId: No"
-- Vault secret `apps/tools/oscar/polaris-pipeline-smoke-test` with the key `smoke_test_value` set to `not-a-secret`. This is the only Vault path the test reads.
+- Broker service `oscar/polaris-pipeline-smoke-test` with a `development` service instance, connected to a Broker account set to "Require RoleId: No"
+- Vault secret `apps/dev/oscar/polaris-pipeline-smoke-test/development` with the key `smoke_test_value` set to `not-a-secret`. This is the only Vault path the test reads.
 - A Jenkins job `oscar/polaris-pipeline-smoke-test` that runs this Jenkinsfile. The job's parameters are defined in the Jenkinsfile. Jenkins only adds them after the first build, so run it once, or add them to the job by hand.
 
 Trigger the job with the `brokerJwt` parameter. For a manual run, that is the only value needed. `githubRunId` is set by the trigger workflow and becomes part of the Broker event's trigger id; when blank, the build tag is used.
+
+To check the Broker JWT, the intention file and the Vault secret without Jenkins, run `BROKER_JWT=<jwt> scripts/test-polaris-pipeline-smoke-test.sh`. Add `preflight` to only validate the intention without opening it.
 
 ## Update Jenkins pipeline repo to use the new library tag
 Pipelines reference the shared library in Jenkinsfiles, for example:
