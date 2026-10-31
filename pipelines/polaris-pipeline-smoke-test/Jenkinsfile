@@ -6,10 +6,9 @@ import ca.bc.gov.nrids.polaris.Vault
 // Polaris pipeline smoke test.
 //
 // Runs the same path as app-oras up to reading the application's secrets from
-// Vault, without deploying anything: a build trigger passes a Broker JWT, the
-// pipeline opens an intention, Broker provisions a Vault token and the pipeline
-// reads a value with it. Jenkins stores no credentials for this test. The JWT
-// arrives as a build parameter, like app-oras.
+// Vault, without deploying anything: the pipeline opens an intention with a
+// Broker JWT, Broker provisions a Vault token and the pipeline reads a value
+// with it. The JWT comes from the secret text credential below.
 //
 // Not covered: ORAS downloads, the infrastructure checkout, the jenkins-apps
 // login, and running Ansible with Podman.
@@ -18,6 +17,9 @@ def intention
 
 final String SERVICE_PROJECT = 'oscar'
 final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
+// Secret text credential holding the Broker JWT of an account connected to
+// oscar/polaris-pipeline-smoke-test.
+final String BROKER_JWT_CREDENTIAL_ID = 'polaris-pipeline-smoke-test-broker-jwt'
 // The intention's environment is development, so the provisioned token reads
 // this dev path. The intention file sets the same environment.
 final String VAULT_PATH = "apps/data/dev/${SERVICE_PROJECT}/${SERVICE_NAME}/development"
@@ -29,8 +31,6 @@ final String VAULT_EXPECTED_VALUE = 'not-a-secret'
 pipeline {
     agent none
     parameters {
-        // A password parameter keeps the JWT out of the build's parameter page.
-        password(name: 'brokerJwt', description: 'Broker JWT for an account connected to oscar/polaris-pipeline-smoke-test')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
     }
     options {
@@ -55,7 +55,10 @@ pipeline {
             }
             steps {
                 script {
-                    def brokerIntention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json'))
+                    def brokerIntention
+                    withCredentials([string(credentialsId: BROKER_JWT_CREDENTIAL_ID, variable: 'BROKER_JWT')]) {
+                        brokerIntention = new BrokerIntention(BROKER_JWT, readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json'))
+                    }
                     brokerIntention.setEventDetails(
                         url: env.BUILD_URL,
                         provider: SERVICE_NAME,
