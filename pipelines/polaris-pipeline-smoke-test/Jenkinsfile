@@ -32,9 +32,7 @@ pipeline {
     parameters {
         // A password parameter keeps the JWT out of the build's parameter page.
         password(name: 'brokerJwt', description: 'Broker JWT for an account connected to oscar/polaris-pipeline-smoke-test')
-        string(name: 'eventProvider', defaultValue: 'polaris-pipeline-smoke-test', description: 'Event provider sent to Broker')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
-        string(name: 'triggerUrl', defaultValue: '', description: 'External workflow URL used in trigger metadata')
     }
     options {
         // Fails the build if no agent is available, instead of leaving it queued.
@@ -61,9 +59,10 @@ pipeline {
                     def brokerIntention = new BrokerIntention("${params.brokerJwt}", readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json'))
                     brokerIntention.setEventDetails(
                         url: env.BUILD_URL,
-                        provider: params.eventProvider,
-                        triggerId: "${SERVICE_NAME} ${params.githubRunId}",
-                        triggerUrl: params.triggerUrl,
+                        provider: SERVICE_NAME,
+                        // Manual builds leave githubRunId blank, so fall back to the build tag.
+                        triggerId: params.githubRunId ? "${SERVICE_NAME} ${params.githubRunId}" : env.BUILD_TAG,
+                        triggerUrl: env.JOB_URL,
                     )
                     brokerIntention.open()
                     // Only set once open succeeds, so post only closes an open intention.
