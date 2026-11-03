@@ -6,13 +6,12 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 
 // Polaris pipeline smoke test.
 //
-// Runs the same path as app-oras up to reading the application's secrets from
-// Vault, without deploying anything: the pipeline opens an intention with a
-// Broker JWT, Broker provisions a Vault token and the pipeline reads a value
-// with it. The JWT comes from the required brokerJwt parameter.
+// The pipeline opens an intention with a Broker JWT, reads an environment
+// secret and Artifactory credentials from Vault, then pulls and runs a pinned
+// hello-world image with Podman. It does not deploy anything.
 //
 // Not covered: ORAS downloads, the infrastructure checkout, the jenkins-apps
-// login, and running Ansible with Podman.
+// login, or running Ansible with Podman.
 
 def intention
 // Keys of the checks that passed, in the order they ran. Printed by the report.
@@ -20,6 +19,9 @@ def passedChecks = []
 
 final String SERVICE_PROJECT = 'oscar'
 final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
+final String ARTIFACTORY_VAULT_PATH = "apps/data/tools/${SERVICE_PROJECT}/${SERVICE_NAME}"
+final String ARTIFACTORY_IMAGE = 'library/hello-world@sha256:c567b231f65614688711a75f31518a064258a51d442117a3e771a3a8fdba78ef'
+final String AUTHFILE = '.docker.config.json'
 // The intention's environment. Parameters only exist after the first build, so
 // default to development until then.
 final String ENV_LONG = params.envLong ?: 'development'
@@ -37,6 +39,10 @@ final Map CHECKS = [
     provision: 'Broker provisions a Vault token and Knox unwraps it',
     read: 'Vault secret is readable with the provisioned token',
     value: 'Vault secret value matches the expected value',
+    toolsProvision: 'Broker provisions a token for the tools credentials',
+    toolsRead: 'Artifactory credentials are readable from the tools path',
+    podmanLogin: 'Podman authenticates to the Artifactory Docker remote',
+    podmanRun: 'Podman pulls and runs the pinned hello-world image',
     close: 'Broker closes the intention as successful',
 ]
 
@@ -114,6 +120,57 @@ pipeline {
                     passedChecks << 'read'
                     check(secret[VAULT_KEY] == VAULT_EXPECTED_VALUE, "Vault value ${VAULT_KEY} was missing or did not match")
                     passedChecks << 'value'
+                }
+            }
+        }
+        stage('Podman tools check') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    intention.startAction('artifactory')
+                    def vaultToken = intention.provisionToken('artifactory')
+                    check(vaultToken != null, 'Broker did not provide a usable tools Vault token')
+                    passedChecks << 'toolsProvision'
+
+                    def vault = new Vault(vaultToken)
+                    def registryCreds
+                    try {
+                        registryCreds = vault.read(ARTIFACTORY_VAULT_PATH)
+                    } finally {
+                        vault.revokeToken()
+                    }
+                    intention.endAction('artifactory')
+                    check(
+                        registryCreds?.artifactory_username && registryCreds?.artifactory_password,
+                        "Artifactory credentials were missing from ${ARTIFACTORY_VAULT_PATH}",
+                    )
+                    passedChecks << 'toolsRead'
+
+                    def podman = new Podman(this, null, AUTHFILE)
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'ARTIFACTORY_PASSWORD', password: registryCreds.artifactory_password]]]) {
+                        podman.login(
+                            authfile: AUTHFILE,
+                            options: "-u ${registryCreds.artifactory_username} -p ${registryCreds.artifactory_password}",
+                        )
+                    }
+                    passedChecks << 'podmanLogin'
+
+                    try {
+                        def output = podman.run(
+                            ARTIFACTORY_IMAGE,
+                            authfile: AUTHFILE,
+                            options: '--pull=always',
+                            returnStdout: true,
+                            skipPipelineEnv: true,
+                        )
+                        check(output.contains('Hello from Docker!'), 'Podman did not produce the expected hello-world output')
+                        passedChecks << 'podmanRun'
+                    } finally {
+                        podman.logout(authfile: AUTHFILE)
+                    }
+
                     println intention.close(true)
                     intention = null
                     passedChecks << 'close'

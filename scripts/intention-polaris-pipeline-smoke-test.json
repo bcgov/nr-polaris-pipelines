@@ -19,6 +19,16 @@
         "project": "oscar",
         "environment": ""
       }
+    },
+    {
+      "action": "server-access",
+      "id": "artifactory",
+      "provision": ["token/self"],
+      "service": {
+        "name": "polaris-pipeline-smoke-test",
+        "project": "oscar",
+        "environment": "tools"
+      }
     }
   ],
   "user": {
