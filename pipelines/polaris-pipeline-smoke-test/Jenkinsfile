@@ -9,8 +9,7 @@ import ca.bc.gov.nrids.polaris.JenkinsUtil
 // Runs the same path as app-oras up to reading the application's secrets from
 // Vault, without deploying anything: the pipeline opens an intention with a
 // Broker JWT, Broker provisions a Vault token and the pipeline reads a value
-// with it. The JWT comes from the brokerJwt parameter when a trigger sends it,
-// otherwise from the secret text credential below.
+// with it. The JWT comes from the required brokerJwt parameter.
 //
 // Not covered: ORAS downloads, the infrastructure checkout, the jenkins-apps
 // login, and running Ansible with Podman.
@@ -21,9 +20,6 @@ def passedChecks = []
 
 final String SERVICE_PROJECT = 'oscar'
 final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
-// Secret text credential holding the Broker JWT of an account connected to
-// oscar/polaris-pipeline-smoke-test. Only used when brokerJwt is not sent.
-final String BROKER_JWT_CREDENTIAL_ID = 'nr-oscar-jwt'
 // The intention's environment. Parameters only exist after the first build, so
 // default to development until then.
 final String ENV_LONG = params.envLong ?: 'development'
@@ -36,7 +32,7 @@ final String VAULT_EXPECTED_VALUE = 'not-a-secret'
 // What the smoke test covers, in the order it is checked.
 final Map CHECKS = [
     agent: 'Jenkins agent runs a shell command and returns its output',
-    credential: 'Broker JWT is available from the parameter or Jenkins credential',
+    credential: 'Broker JWT is provided in the brokerJwt parameter',
     open: 'Broker accepts the JWT and opens the intention',
     provision: 'Broker provisions a Vault token and Knox unwraps it',
     read: 'Vault secret is readable with the provisioned token',
@@ -49,7 +45,7 @@ pipeline {
     parameters {
         choice(name: 'envLong', choices: ['development', 'test', 'production'], description: 'Environment of the intention and the Vault secret it reads')
         // A password parameter keeps the JWT out of the build's parameter page.
-        password(name: 'brokerJwt', defaultValue: '', description: 'Broker JWT for oscar/polaris-pipeline-smoke-test. Leave blank to use the Jenkins credential.')
+        password(name: 'brokerJwt', defaultValue: '', description: 'Required. Broker JWT for oscar/polaris-pipeline-smoke-test.')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
     }
     options {
@@ -76,16 +72,9 @@ pipeline {
             steps {
                 script {
                     def intentionMessage = readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json')
-                    def brokerIntention
-                    if (params.brokerJwt && "${params.brokerJwt}") {
-                        println 'Using the Broker JWT from the brokerJwt parameter'
-                        brokerIntention = new BrokerIntention("${params.brokerJwt}", intentionMessage)
-                    } else {
-                        println "Using the Broker JWT from the ${BROKER_JWT_CREDENTIAL_ID} credential"
-                        withCredentials([string(credentialsId: BROKER_JWT_CREDENTIAL_ID, variable: 'BROKER_JWT')]) {
-                            brokerIntention = new BrokerIntention(BROKER_JWT, intentionMessage)
-                        }
-                    }
+                    // Password parameter values are Secret objects, so compare the string form.
+                    check(params.brokerJwt && "${params.brokerJwt}".trim(), 'The brokerJwt parameter is required. Paste the Broker JWT for oscar/polaris-pipeline-smoke-test.')
+                    def brokerIntention = new BrokerIntention("${params.brokerJwt}".trim(), intentionMessage)
                     passedChecks << 'credential'
                     brokerIntention.setEventDetails(
                         url: env.BUILD_URL,
