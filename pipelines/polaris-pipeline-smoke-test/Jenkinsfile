@@ -2,6 +2,7 @@
 import ca.bc.gov.nrids.polaris.Podman
 import ca.bc.gov.nrids.polaris.BrokerIntention
 import ca.bc.gov.nrids.polaris.Vault
+import ca.bc.gov.nrids.polaris.JenkinsUtil
 
 // Polaris pipeline smoke test.
 //
@@ -23,9 +24,11 @@ final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
 // Secret text credential holding the Broker JWT of an account connected to
 // oscar/polaris-pipeline-smoke-test. Only used when brokerJwt is not sent.
 final String BROKER_JWT_CREDENTIAL_ID = 'nr-oscar-jwt'
-// The intention's environment is development, so the provisioned token reads
-// this dev path. The intention file sets the same environment.
-final String VAULT_PATH = "apps/data/dev/${SERVICE_PROJECT}/${SERVICE_NAME}/development"
+// The intention's environment. Parameters only exist after the first build, so
+// default to development until then.
+final String ENV_LONG = params.envLong ?: 'development'
+// The provisioned token can only read the intention environment's path.
+final String VAULT_PATH = "apps/data/${JenkinsUtil.convertLongEnvToShort(ENV_LONG)}/${SERVICE_PROJECT}/${SERVICE_NAME}/${ENV_LONG}"
 // The secret must contain this key and value. The value is not a secret, so the
 // test can check it exactly.
 final String VAULT_KEY = 'smoke_test_value'
@@ -44,6 +47,7 @@ final Map CHECKS = [
 pipeline {
     agent none
     parameters {
+        choice(name: 'envLong', choices: ['development', 'test', 'production'], description: 'Environment of the intention and the Vault secret it reads')
         // A password parameter keeps the JWT out of the build's parameter page.
         password(name: 'brokerJwt', defaultValue: '', description: 'Broker JWT for oscar/polaris-pipeline-smoke-test. Leave blank to use the Jenkins credential.')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
@@ -89,6 +93,8 @@ pipeline {
                         // Manual builds leave githubRunId blank, so fall back to the build tag.
                         triggerId: params.githubRunId ? "${SERVICE_NAME} ${params.githubRunId}" : env.BUILD_TAG,
                         triggerUrl: env.JOB_URL,
+                        // Only applies because the intention file leaves the environment blank.
+                        environment: ENV_LONG,
                     )
                     brokerIntention.open()
                     passedChecks << 'open'
@@ -138,7 +144,7 @@ pipeline {
         }
         always {
             script {
-                printReport(CHECKS, passedChecks, currentBuild.currentResult, VAULT_PATH)
+                printReport(CHECKS, passedChecks, currentBuild.currentResult, ENV_LONG, VAULT_PATH)
             }
             node(Podman.AGENT_LABEL_APP) {
                 cleanWs(deleteDirs: true)
@@ -155,9 +161,9 @@ def check(boolean condition, String message) {
 
 // Prints what was tested and the result. The first check that did not pass in a
 // failed build is the one that failed; later checks did not run.
-def printReport(Map checks, List passed, String buildResult, String vaultPath) {
+def printReport(Map checks, List passed, String buildResult, String environment, String vaultPath) {
     def failureMarked = false
-    def lines = ['', '================ Polaris pipeline smoke test report ================', "Vault path: ${vaultPath}"]
+    def lines = ['', '================ Polaris pipeline smoke test report ================', "Environment: ${environment}", "Vault path: ${vaultPath}"]
     for (entry in checks) {
         def status = 'NOT RUN '
         if (passed.contains(entry.key)) {

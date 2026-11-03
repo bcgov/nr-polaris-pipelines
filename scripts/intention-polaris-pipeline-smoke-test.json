@@ -17,7 +17,7 @@
       "service": {
         "name": "polaris-pipeline-smoke-test",
         "project": "oscar",
-        "environment": "development"
+        "environment": ""
       }
     }
   ],

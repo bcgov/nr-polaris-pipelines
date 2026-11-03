@@ -13,14 +13,14 @@
 ORAS downloads, the infrastructure checkout, the `jenkins-apps` login and running Ansible with Podman are not tested.
 
 Setup:
-- Broker service `oscar/polaris-pipeline-smoke-test` with a `development` service instance, connected to a Broker account set to "Require RoleId: No"
-- Vault secret `apps/dev/oscar/polaris-pipeline-smoke-test/development` with the key `smoke_test_value` set to `not-a-secret`. This is the only Vault path the test reads.
+- Broker service `oscar/polaris-pipeline-smoke-test` with `development`, `test` and `production` service instances, connected to a Broker account set to "Require RoleId: No"
+- Vault secrets `apps/<dev|test|prod>/oscar/polaris-pipeline-smoke-test/<environment>` (for example `apps/test/oscar/polaris-pipeline-smoke-test/test`) with the key `smoke_test_value` set to `not-a-secret`. Each run only reads the path for its `envLong`.
 - A Jenkins secret text credential `nr-oscar-jwt` holding the account's Broker JWT, if the trigger does not send `brokerJwt`.
 - A Jenkins job `oscar/polaris-pipeline-smoke-test` that runs this Jenkinsfile. The job's parameters are defined in the Jenkinsfile. Jenkins only adds them after the first build, so run it once, or add them to the job by hand.
 
-Run the job with no parameters for a manual test. The trigger workflow sends `brokerJwt`. `githubRunId` is set by the trigger workflow and becomes part of the Broker event's trigger id; when blank, the build tag is used.
+Run the job with no parameters for a manual test in `development`. `envLong` sets the intention's environment and which Vault secret is read; the trigger workflow sends the environment it targets, along with `brokerJwt`. `githubRunId` is set by the trigger workflow and becomes part of the Broker event's trigger id; when blank, the build tag is used.
 
-To check the Broker JWT, the intention file and the Vault secret without Jenkins, run `BROKER_JWT=<jwt> scripts/test-polaris-pipeline-smoke-test.sh`. Add `preflight` to only validate the intention without opening it.
+To check the Broker JWT, the intention file and the Vault secret without Jenkins, run `BROKER_JWT=<jwt> scripts/test-polaris-pipeline-smoke-test.sh`. Set `ENV_LONG=test` or `ENV_LONG=production` to test another environment, and add `preflight` to only validate the intention without opening it.
 
 ## Update Jenkins pipeline repo to use the new library tag
 Pipelines reference the shared library in Jenkinsfiles, for example:

@@ -2,7 +2,9 @@
 # Manually runs the Broker and Vault steps of the Polaris pipeline smoke test,
 # without Jenkins. Use it to check the Broker JWT and the intention file.
 #
-# Usage: BROKER_JWT=<jwt> scripts/test-polaris-pipeline-smoke-test.sh [preflight]
+# Usage: BROKER_JWT=<jwt> [ENV_LONG=test] scripts/test-polaris-pipeline-smoke-test.sh [preflight]
+#
+# ENV_LONG is development (default), test or production.
 #
 # With "preflight", only validates the intention (nothing is opened). Otherwise
 # runs the full sequence the Jenkinsfile does. Requires curl and jq. The JWT,
@@ -13,7 +15,14 @@ set -euo pipefail
 BROKER_URL="${BROKER_URL:-https://broker.io.nrs.gov.bc.ca/v1}"
 KNOX_URL="${KNOX_URL:-https://knox.io.nrs.gov.bc.ca/v1}"
 INTENTION_FILE="$(dirname "$0")/intention-polaris-pipeline-smoke-test.json"
-VAULT_PATH="apps/data/dev/oscar/polaris-pipeline-smoke-test/development"
+ENV_LONG="${ENV_LONG:-development}"
+case "${ENV_LONG}" in
+  development) ENV_SHORT=dev ;;
+  test) ENV_SHORT=test ;;
+  production) ENV_SHORT=prod ;;
+  *) echo "ENV_LONG must be development, test or production" >&2; exit 1 ;;
+esac
+VAULT_PATH="apps/data/${ENV_SHORT}/oscar/polaris-pipeline-smoke-test/${ENV_LONG}"
 EXPECTED_KEY=smoke_test_value
 EXPECTED_VALUE=not-a-secret
 SCHEME=Bearer
@@ -35,7 +44,9 @@ call() {
 
 INTENTION=$(jq \
   --arg id "manual-$(date +%s)" \
+  --arg env "${ENV_LONG}" \
   '.event.provider = "polaris-pipeline-smoke-test"
+   | .actions[].service.environment = $env
    | .event.url = "https://github.com/bcgov/nr-polaris-pipelines"
    | .event.trigger.id = $id
    | .event.trigger.url = "https://github.com/bcgov/nr-polaris-pipelines"' "${INTENTION_FILE}")
