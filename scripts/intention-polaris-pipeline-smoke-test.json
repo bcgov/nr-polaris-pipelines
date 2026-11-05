@@ -2,6 +2,7 @@
   "event": {
     "provider": "",
     "reason": "Polaris pipeline smoke test",
+    "transient": true,
     "url": "",
     "trigger": {
       "id": "",
