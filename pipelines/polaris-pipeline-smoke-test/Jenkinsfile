@@ -34,7 +34,7 @@ final String VAULT_EXPECTED_VALUE = 'not-a-secret'
 // What the smoke test covers, in the order it is checked.
 final Map CHECKS = [
     agent: 'Jenkins agent runs a shell command and returns its output',
-    credential: 'Broker JWT is provided in the brokerJwt parameter',
+    credential: 'Broker JWT is provided by the polaris-pipeline-smoke-test-jwt credential',
     open: 'Broker accepts the JWT and opens the intention',
     provision: 'Broker provisions a Vault token and Knox unwraps it',
     read: 'Vault secret is readable with the provisioned token',
@@ -50,8 +50,6 @@ pipeline {
     agent none
     parameters {
         choice(name: 'envLong', choices: ['development', 'test', 'production'], description: 'Environment of the intention and the Vault secret it reads')
-        // A password parameter keeps the JWT out of the build's parameter page.
-        password(name: 'brokerJwt', defaultValue: '', description: 'Required. Broker JWT for oscar/polaris-pipeline-smoke-test.')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
     }
     options {
@@ -78,9 +76,11 @@ pipeline {
             steps {
                 script {
                     def intentionMessage = readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json')
-                    // Password parameter values are Secret objects, so compare the string form.
-                    check(params.brokerJwt && "${params.brokerJwt}".trim(), 'The brokerJwt parameter is required. Paste the Broker JWT for oscar/polaris-pipeline-smoke-test.')
-                    def brokerIntention = new BrokerIntention("${params.brokerJwt}".trim(), intentionMessage)
+                    def brokerIntention
+                    withCredentials([string(credentialsId: 'polaris-pipeline-smoke-test-jwt', variable: 'SMOKE_TEST_JWT')]) {
+                        check(SMOKE_TEST_JWT && SMOKE_TEST_JWT.trim(), 'The polaris-pipeline-smoke-test-jwt credential is empty.')
+                        brokerIntention = new BrokerIntention(SMOKE_TEST_JWT.trim(), intentionMessage)
+                    }
                     passedChecks << 'credential'
                     brokerIntention.setEventDetails(
                         url: env.BUILD_URL,
