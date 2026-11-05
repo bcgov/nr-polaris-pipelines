@@ -1,0 +1,38 @@
+{
+  "event": {
+    "provider": "",
+    "reason": "Polaris pipeline smoke test",
+    "transient": true,
+    "url": "",
+    "trigger": {
+      "id": "",
+      "name": "GitHub Action",
+      "url": ""
+    }
+  },
+  "actions": [
+    {
+      "action": "package-configure",
+      "id": "configure",
+      "provision": ["token/self"],
+      "service": {
+        "name": "polaris-pipeline-smoke-test",
+        "project": "oscar",
+        "environment": ""
+      }
+    },
+    {
+      "action": "server-access",
+      "id": "artifactory",
+      "provision": ["token/self"],
+      "service": {
+        "name": "polaris-pipeline-smoke-test",
+        "project": "oscar",
+        "environment": "tools"
+      }
+    }
+  ],
+  "user": {
+    "name": "jenkins-polaris@internal"
+  }
+}

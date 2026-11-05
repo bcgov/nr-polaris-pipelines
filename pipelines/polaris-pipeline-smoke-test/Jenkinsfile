@@ -1,0 +1,226 @@
+@Library('polaris@v2.2.0')
+import ca.bc.gov.nrids.polaris.Podman
+import ca.bc.gov.nrids.polaris.BrokerIntention
+import ca.bc.gov.nrids.polaris.Vault
+import ca.bc.gov.nrids.polaris.JenkinsUtil
+
+// Polaris pipeline smoke test.
+//
+// The pipeline opens an intention with a Broker JWT, reads an environment
+// secret and Artifactory credentials from Vault, then pulls and runs a pinned
+// hello-world image with Podman. It does not deploy anything.
+//
+// Not covered: ORAS downloads, the infrastructure checkout, the jenkins-apps
+// login, or running Ansible with Podman.
+
+def intention
+// Keys of the checks that passed, in the order they ran. Printed by the report.
+def passedChecks = []
+
+final String SERVICE_PROJECT = 'oscar'
+final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
+final String ARTIFACTORY_VAULT_PATH = "apps/data/tools/${SERVICE_PROJECT}/${SERVICE_NAME}"
+final String ARTIFACTORY_IMAGE = 'library/hello-world@sha256:c567b231f65614688711a75f31518a064258a51d442117a3e771a3a8fdba78ef'
+final String AUTHFILE = '.docker.config.json'
+// The intention's environment. Parameters only exist after the first build, so
+// default to development until then.
+final String ENV_LONG = params.envLong ?: 'development'
+// The provisioned token can only read the intention environment's path.
+final String VAULT_PATH = "apps/data/${JenkinsUtil.convertLongEnvToShort(ENV_LONG)}/${SERVICE_PROJECT}/${SERVICE_NAME}/${ENV_LONG}"
+// The secret must contain this key and value. The value is not a secret, so the
+// test can check it exactly.
+final String VAULT_KEY = 'smoke_test_value'
+final String VAULT_EXPECTED_VALUE = 'not-a-secret'
+// What the smoke test covers, in the order it is checked.
+final Map CHECKS = [
+    agent: 'Jenkins agent runs a shell command and returns its output',
+    credential: 'Broker JWT is provided by the polaris-pipeline-smoke-test-jwt credential',
+    open: 'Broker accepts the JWT and opens the intention',
+    provision: 'Broker provisions a Vault token and Knox unwraps it',
+    read: 'Vault secret is readable with the provisioned token',
+    value: 'Vault secret value matches the expected value',
+    toolsProvision: 'Broker provisions a token for the tools credentials',
+    toolsRead: 'Artifactory credentials are readable from the tools path',
+    podmanLogin: 'Podman authenticates to the Artifactory Docker remote',
+    podmanRun: 'Podman pulls and runs the pinned hello-world image',
+    close: 'Broker closes the intention as successful',
+]
+
+pipeline {
+    agent none
+    parameters {
+        choice(name: 'envLong', choices: ['development', 'test', 'production'], description: 'Environment of the intention and the Vault secret it reads')
+        string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
+    }
+    options {
+        // Fails the build if no agent is available, instead of leaving it queued.
+        timeout(time: 10, unit: 'MINUTES')
+    }
+    stages {
+        stage('Initialize') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    // app-oras captures checksums and intention ids with returnStdout.
+                    check(sh(returnStdout: true, script: 'echo ok').trim() == 'ok', 'sh returnStdout failed')
+                    passedChecks << 'agent'
+                }
+            }
+        }
+        stage('Open Intention') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    def intentionMessage = readJSON(file: 'scripts/intention-polaris-pipeline-smoke-test.json')
+                    def brokerIntention
+                    withCredentials([string(credentialsId: 'polaris-pipeline-smoke-test-jwt', variable: 'SMOKE_TEST_JWT')]) {
+                        check(SMOKE_TEST_JWT && SMOKE_TEST_JWT.trim(), 'The polaris-pipeline-smoke-test-jwt credential is empty.')
+                        brokerIntention = new BrokerIntention(SMOKE_TEST_JWT.trim(), intentionMessage)
+                    }
+                    passedChecks << 'credential'
+                    brokerIntention.setEventDetails(
+                        url: env.BUILD_URL,
+                        provider: SERVICE_NAME,
+                        // Manual builds leave githubRunId blank, so fall back to the build tag.
+                        triggerId: params.githubRunId ? "${SERVICE_NAME} ${params.githubRunId}" : env.BUILD_TAG,
+                        triggerUrl: env.JOB_URL,
+                        // Only applies because the intention file leaves the environment blank.
+                        environment: ENV_LONG,
+                    )
+                    brokerIntention.open()
+                    passedChecks << 'open'
+                    // Only set once open succeeds, so post only closes an open intention.
+                    intention = brokerIntention
+                }
+            }
+        }
+        stage('Read Vault secret') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    intention.startAction('configure')
+                    // No role ID, like app-oras when the application has no knox role id
+                    // credential. The Broker account must be set to 'Require RoleId: No'.
+                    def vaultAppToken = intention.provisionToken('configure')
+                    check(vaultAppToken != null, 'Broker did not provide a usable Vault token')
+                    passedChecks << 'provision'
+                    def vaultApp = new Vault(vaultAppToken)
+                    // Reads only the expected key, so nothing else in the secret is
+                    // copied into the build environment.
+                    def secret = vaultApp.read(VAULT_PATH)
+                    vaultApp.revokeToken()
+                    intention.endAction('configure')
+                    check(secret != null, "Could not read ${VAULT_PATH} from Vault")
+                    passedChecks << 'read'
+                    check(secret[VAULT_KEY] == VAULT_EXPECTED_VALUE, "Vault value ${VAULT_KEY} was missing or did not match")
+                    passedChecks << 'value'
+                }
+            }
+        }
+        stage('Podman tools check') {
+            agent {
+                label Podman.AGENT_LABEL_APP
+            }
+            steps {
+                script {
+                    intention.startAction('artifactory')
+                    def vaultToken = intention.provisionToken('artifactory')
+                    check(vaultToken != null, 'Broker did not provide a usable tools Vault token')
+                    passedChecks << 'toolsProvision'
+
+                    def vault = new Vault(vaultToken)
+                    def registryCreds
+                    try {
+                        registryCreds = vault.read(ARTIFACTORY_VAULT_PATH)
+                    } finally {
+                        vault.revokeToken()
+                    }
+                    intention.endAction('artifactory')
+                    check(
+                        registryCreds?.artifactory_username && registryCreds?.artifactory_password,
+                        "Artifactory credentials were missing from ${ARTIFACTORY_VAULT_PATH}",
+                    )
+                    passedChecks << 'toolsRead'
+
+                    def podman = new Podman(this, null, AUTHFILE)
+                    wrap([$class: 'MaskPasswordsBuildWrapper', varPasswordPairs: [[var: 'ARTIFACTORY_PASSWORD', password: registryCreds.artifactory_password]]]) {
+                        podman.login(
+                            authfile: AUTHFILE,
+                            options: "-u ${registryCreds.artifactory_username} -p ${registryCreds.artifactory_password}",
+                        )
+                    }
+                    passedChecks << 'podmanLogin'
+
+                    try {
+                        def output = podman.run(
+                            ARTIFACTORY_IMAGE,
+                            authfile: AUTHFILE,
+                            options: '--pull=always',
+                            returnStdout: true,
+                            skipPipelineEnv: true,
+                        )
+                        check(output.contains('Hello from Docker!'), 'Podman did not produce the expected hello-world output')
+                        passedChecks << 'podmanRun'
+                    } finally {
+                        podman.logout(authfile: AUTHFILE)
+                    }
+
+                    println intention.close(true)
+                    intention = null
+                    passedChecks << 'close'
+                }
+            }
+        }
+    }
+    post {
+        unsuccessful {
+            node(Podman.AGENT_LABEL_APP) {
+                script {
+                    if (intention) {
+                        println intention.close(false)
+                    }
+                }
+            }
+        }
+        always {
+            script {
+                printReport(CHECKS, passedChecks, currentBuild.currentResult, ENV_LONG, VAULT_PATH)
+            }
+            node(Podman.AGENT_LABEL_APP) {
+                cleanWs(deleteDirs: true)
+            }
+        }
+    }
+}
+
+def check(boolean condition, String message) {
+    if (!condition) {
+        error(message)
+    }
+}
+
+// Prints what was tested and the result. The first check that did not pass in a
+// failed build is the one that failed; later checks did not run.
+def printReport(Map checks, List passed, String buildResult, String environment, String vaultPath) {
+    def failureMarked = false
+    def lines = ['', '================ Polaris pipeline smoke test report ================', "Environment: ${environment}", "Vault path: ${vaultPath}"]
+    for (entry in checks) {
+        def status = 'NOT RUN '
+        if (passed.contains(entry.key)) {
+            status = 'PASS    '
+        } else if (buildResult != 'SUCCESS' && !failureMarked) {
+            status = 'FAIL    '
+            failureMarked = true
+        }
+        lines << "  ${status}${entry.value}".toString()
+    }
+    lines << "Result: ${buildResult}".toString()
+    lines << '===================================================================='
+    println lines.join('\n')
+}
