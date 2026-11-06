@@ -22,9 +22,10 @@ final String SERVICE_NAME = 'polaris-pipeline-smoke-test'
 final String ARTIFACTORY_VAULT_PATH = "apps/data/tools/${SERVICE_PROJECT}/${SERVICE_NAME}"
 final String ARTIFACTORY_IMAGE = 'library/hello-world@sha256:c567b231f65614688711a75f31518a064258a51d442117a3e771a3a8fdba78ef'
 final String AUTHFILE = '.docker.config.json'
-// The intention's environment. Parameters only exist after the first build, so
-// default to development until then.
-final String ENV_LONG = params.envLong ?: 'development'
+final String ENV_LONG = env.POLARIS_ENVIRONMENT
+if (!(ENV_LONG in ['development', 'test', 'production'])) {
+    error('POLARIS_ENVIRONMENT must be configured on this Jenkins instance as development, test or production.')
+}
 // The provisioned token can only read the intention environment's path.
 final String VAULT_PATH = "apps/data/${JenkinsUtil.convertLongEnvToShort(ENV_LONG)}/${SERVICE_PROJECT}/${SERVICE_NAME}/${ENV_LONG}"
 // The secret must contain this key and value. The value is not a secret, so the
@@ -49,7 +50,7 @@ final Map CHECKS = [
 pipeline {
     agent none
     parameters {
-        choice(name: 'envLong', choices: ['development', 'test', 'production'], description: 'Environment of the intention and the Vault secret it reads')
+        choice(name: 'envLong', choices: [ENV_LONG], description: 'Environment of this Jenkins instance')
         string(name: 'githubRunId', defaultValue: '', description: 'External workflow run id used in trigger metadata')
     }
     options {
@@ -63,6 +64,9 @@ pipeline {
             }
             steps {
                 script {
+                    if (params.envLong && params.envLong != ENV_LONG) {
+                        error("envLong must match this Jenkins instance (${ENV_LONG}). Retry with the updated environment choice.")
+                    }
                     // app-oras captures checksums and intention ids with returnStdout.
                     check(sh(returnStdout: true, script: 'echo ok').trim() == 'ok', 'sh returnStdout failed')
                     passedChecks << 'agent'

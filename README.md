@@ -19,8 +19,9 @@ Setup:
 - Vault secrets `apps/<dev|test|prod>/oscar/polaris-pipeline-smoke-test/<environment>` (for example `apps/test/oscar/polaris-pipeline-smoke-test/test`) with the key `smoke_test_value` set to `not-a-secret`. Each run only reads the path for its `envLong`.
 - Vault tools secret `apps/tools/oscar/polaris-pipeline-smoke-test` with `artifactory_username` and `artifactory_password`; the Broker account must be authorized to access this service's tools environment.
 - A Jenkins job `oscar/polaris-pipeline-smoke-test` that runs this Jenkinsfile. The job's parameters are defined in the Jenkinsfile. Jenkins only adds them after the first build, so run it once, or add them to the job by hand.
+- The Jenkins global environment variable `POLARIS_ENVIRONMENT`, set to `development`, `test` or `production` by the deployment configuration.
 
-For a manual test, use "Build with Parameters". `envLong` sets the intention's environment and which Vault secret is read (default `development`); the trigger workflow sends the environment it targets. `githubRunId` is set by the trigger workflow and becomes part of the Broker event's trigger id; when blank, the build tag is used.
+For a manual test, use "Build with Parameters". `envLong` offers only this Jenkins instance's `POLARIS_ENVIRONMENT`, which determines the intention's environment and Vault path for manual and scheduled builds. The trigger workflow sends the environment it targets; a mismatched value fails the build. After updating an existing job, run it once to refresh its parameter choices; a stale `development` value on test or production will fail that first build. `githubRunId` is set by the trigger workflow and becomes part of the Broker event's trigger id; when blank, the build tag is used.
 
 To check the Broker JWT, intention file and both Vault paths without Jenkins or Podman, run `BROKER_JWT=<jwt> scripts/test-polaris-pipeline-smoke-test.sh`. Set `ENV_LONG=test` or `ENV_LONG=production` to test another environment, and add `preflight` to only validate the intention without opening it.
 
