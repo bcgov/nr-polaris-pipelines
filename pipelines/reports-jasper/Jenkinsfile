@@ -69,7 +69,7 @@ pipeline {
                     }
                     def backstage = readYaml (file: 'app/catalog-composer.yaml')
                     env.CATALOG_PLAYBOOK_PATH = 'playbooks'
-                    env.CATALOG_JASPER_PATH = backstage['metadata']['annotations']['jasperSourcePath']
+                    env.CATALOG_JASPER_PATH = backstage['spec']['answers']['jasperSourcePath']
                     if (env.CATALOG_JASPER_PATH.contains("{{ playbook_dir }}")) {
                       env.CATALOG_JASPER_PATH = env.CATALOG_JASPER_PATH.replaceAll("\\{\\{ playbook_dir \\}\\}", env.CATALOG_PLAYBOOK_PATH)
                     }
