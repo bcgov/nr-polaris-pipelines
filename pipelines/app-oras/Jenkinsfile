@@ -21,7 +21,7 @@ def podman
  * - eventProvider: Event source/provider name sent to Broker.
  * - githubRunId: External workflow run id used in trigger metadata.
  * - triggerUrl: External workflow/job URL used in trigger metadata.
- * - ansibleCollectionBranchTag: Polaris collection tag/branch (default: v3.5.0).
+ * - ansibleCollectionBranchTag: Polaris collection tag/branch (default: v5.0.2).
  * - deploymentApprover: Username/email recorded as deployment approver (default: github@internal).
  * - intentionId: Source intention id recorded in deployment metadata.
  * - sourceRoot: Application source root path (default: .).
@@ -230,7 +230,7 @@ pipeline {
                 ENV_LONG = "${params.envLong}"
                 TRIGGER_URL = "${params.triggerUrl}"
                 HTTP_PROXY = "${params.envLong == 'production' ? 'http://forwardproxy.nrs.bcgov:23128' : 'http://test-forwardproxy.nrs.bcgov:23128'}"
-                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v5.0.1"}"
+                ANSIBLE_COLLECTION_VERSION = "${params.ansibleCollectionBranchTag != null && params.ansibleCollectionBranchTag != "" ? ",${params.ansibleCollectionBranchTag}" : ",v5.0.2"}"
                 PODMAN_ANSIBLE_COLLECTION_URL = "github.com/bcgov/nr-polaris-collection.git#polaris/deploy${env.ANSIBLE_COLLECTION_VERSION}"
                 PODMAN_ANSIBLE_COLLECTION_PATH = "./collections/ansible_collections"
                 GIT_CREDS = credentials('ci-user')
