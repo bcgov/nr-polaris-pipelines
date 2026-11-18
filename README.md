@@ -1,9 +1,5 @@
 # polaris-pipelines
 
-## Default Ansible collection
-
-Deployment and service-control pipelines use Polaris Ansible collection `v5.0.2` by default, including the Tomcat archive permission fix. Deployment pipelines retain the `ansibleCollectionBranchTag` override when a non-empty value is supplied; service-control uses the pinned version directly.
-
 ## Polaris pipeline smoke test
 `pipelines/polaris-pipeline-smoke-test/Jenkinsfile` checks that Jenkins can still run the Polaris deployment pipeline, for example after a Jenkins upgrade. It reads the application's secrets from Vault and tests Podman's authenticated pull-and-run path without deploying anything:
 
